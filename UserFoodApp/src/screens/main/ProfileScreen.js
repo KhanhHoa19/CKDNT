@@ -34,7 +34,7 @@ export default function ProfileScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-       
+
       </View>
 
       {/* Avatar */}
@@ -73,13 +73,6 @@ export default function ProfileScreen({ navigation }) {
         onPress={() => navigation.navigate("EditProfile")}
       >
         <Text style={styles.editBtnText}>Edit Profile</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.editBtn, { borderColor: '#10B981', marginTop: -4 }]}
-        onPress={() => navigation.navigate("AdminScreen")}
-      >
-        <Text style={[styles.editBtnText, { color: '#10B981' }]}>🛡️ Quản lý Người dùng</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
