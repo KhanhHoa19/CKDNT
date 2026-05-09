@@ -31,6 +31,7 @@ export default function CouponManagementScreen() {
   const [minItems, setMinItems] = useState("");
   const [usageLimit, setUsageLimit] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [applicableProductsStr, setApplicableProductsStr] = useState("");
   
   // Expiration
   const [expirationDateStr, setExpirationDateStr] = useState(""); // YYYY-MM-DD
@@ -81,6 +82,7 @@ export default function CouponManagementScreen() {
     setMinItems("");
     setUsageLimit("");
     setIsActive(true);
+    setApplicableProductsStr("");
     setExpirationDateStr("");
     setModalVisible(true);
   };
@@ -95,6 +97,7 @@ export default function CouponManagementScreen() {
     setMinItems(coupon.minItems?.toString() || "");
     setUsageLimit(coupon.usageLimit?.toString() || "");
     setIsActive(coupon.isActive);
+    setApplicableProductsStr(coupon.applicableProducts ? coupon.applicableProducts.join(", ") : "");
     
     if (coupon.expirationDate) {
       const d = new Date(coupon.expirationDate);
@@ -129,6 +132,11 @@ export default function CouponManagementScreen() {
         }
     }
 
+    let applicableProducts = [];
+    if (applicableProductsStr.trim()) {
+      applicableProducts = applicableProductsStr.split(",").map(s => s.trim()).filter(s => s !== "");
+    }
+
     const payload = {
       code: code.toUpperCase(),
       discountType,
@@ -136,6 +144,7 @@ export default function CouponManagementScreen() {
       minOrderValue: minOrderValue ? Number(minOrderValue) : 0,
       minItems: minItems ? Number(minItems) : 0,
       usageLimit: usageLimit ? Number(usageLimit) : null,
+      applicableProducts,
       isActive,
       isExpired,
       expirationDate: expDateISO,
@@ -305,6 +314,9 @@ export default function CouponManagementScreen() {
 
               <Text style={styles.label}>Giới hạn số lần sử dụng</Text>
               <TextInput style={styles.input} value={usageLimit} onChangeText={setUsageLimit} keyboardType="numeric" placeholder="VD: 100" />
+
+              <Text style={styles.label}>Áp dụng cho sản phẩm (ID cách nhau dấu phẩy)</Text>
+              <TextInput style={styles.input} value={applicableProductsStr} onChangeText={setApplicableProductsStr} placeholder="Để trống = Áp dụng tất cả" />
 
               <Text style={styles.label}>Ngày hết hạn (YYYY-MM-DD)</Text>
               <TextInput style={styles.input} value={expirationDateStr} onChangeText={setExpirationDateStr} placeholder="VD: 2026-12-31" />
