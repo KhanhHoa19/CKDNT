@@ -9,8 +9,6 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
-import { addDoc, collection, doc, updateDoc, increment, arrayUnion } from "firebase/firestore";
-import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -51,12 +49,6 @@ export default function CartScreen({ navigation }) {
   const [savingQR, setSavingQR] = useState(false);
   const qrRef = useRef(null);
   const [liveStockMap, setLiveStockMap] = useState({});
-
-  // States cho coupon (Main)
-  const [couponCode, setCouponCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [couponError, setCouponError] = useState("");
-  const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   // States cho coupon
   const [couponCode, setCouponCode] = useState("");
@@ -137,34 +129,6 @@ export default function CartScreen({ navigation }) {
       ? liveStockMap[item.id]
       : Number(item.soluong ?? 0);
 
-  // Xử lý Coupon (Main)
-  const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) return;
-    setValidatingCoupon(true);
-    setCouponError("");
-    
-    console.log("=== COUPON DEBUG ===");
-    console.log("Code:", couponCode);
-    console.log("Total Price:", totalPrice);
-    const totalQty = cartItems.reduce((sum, item) => sum + (item.qty || 1), 0);
-    console.log("Total Qty:", totalQty);
-    console.log("User ID:", user?.uid);
-    const result = await validateCoupon(couponCode, totalPrice, totalQty, user?.uid, cartItems);
-    console.log("Validate Result:", JSON.stringify(result));
-    
-    if (result.success) {
-      setAppliedCoupon({
-        code: result.code,
-        discountAmount: result.discountAmount,
-        couponId: result.couponId
-      });
-      Alert.alert("Thành công", result.message);
-    } else {
-      setAppliedCoupon(null);
-      setCouponError(result.message);
-    }
-    setValidatingCoupon(false);
-  };
 
   const placeOrder = async (method, isPaid = false, orderIdToUse) => {
     setLoading(true);
