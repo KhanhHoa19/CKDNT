@@ -1,6 +1,6 @@
 // Khi test với Expo Go trên điện thoại thật → dùng IP LAN
 // Khi chạy Android Emulator → dùng 10.0.2.2
-const API_URL = "http://192.168.101.27:3000"; // ← đổi IP máy bạn
+const API_URL = "http://192.168.100.188:3000"; // ← đổi IP máy bạn
 
 /**
  * Tạo PaymentIntent — gọi trước khi confirmPayment

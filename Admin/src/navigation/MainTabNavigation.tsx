@@ -13,11 +13,21 @@ import ProductDetailAdminScreen from "../screens/products/ProductDetailAdminScre
 import ProductListScreen from "../screens/products/ProductListScreen";
 import EditProfileScreen from "../screens/profile/EditProfileScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
+import CouponManagementScreen from "../screens/coupons/CouponManagementScreen";
 
 const Tab = createBottomTabNavigator();
 const ProductStack = createNativeStackNavigator();
 const OrderStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+const CouponStack = createNativeStackNavigator();
+
+function CouponStackNav() {
+  return (
+    <CouponStack.Navigator screenOptions={{ headerShown: false }}>
+      <CouponStack.Screen name="CouponManagement" component={CouponManagementScreen} />
+    </CouponStack.Navigator>
+  );
+}
 
 function ProductStackNav() {
   return (
@@ -88,6 +98,14 @@ export default function MainTabNavigator() {
         options={{
           tabBarLabel: "Đơn hàng",
           tabBarIcon: ({ focused }) => <TabIcon emoji="🧾" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Coupons"
+        component={CouponStackNav}
+        options={{
+          tabBarLabel: "Khuyến mãi",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏷️" focused={focused} />,
         }}
       />
       <Tab.Screen
