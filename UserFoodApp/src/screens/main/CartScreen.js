@@ -52,9 +52,14 @@ export default function CartScreen({ navigation }) {
     setValidatingCoupon(true);
     setCouponError("");
     
-    // Tính tổng số lượng sản phẩm (kể cả cùng loại)
+    console.log("=== COUPON DEBUG ===");
+    console.log("Code:", couponCode);
+    console.log("Total Price:", totalPrice);
     const totalQty = cartItems.reduce((sum, item) => sum + (item.qty || 1), 0);
-    const result = await validateCoupon(couponCode, totalPrice, totalQty, user.uid);
+    console.log("Total Qty:", totalQty);
+    console.log("User ID:", user?.uid);
+    const result = await validateCoupon(couponCode, totalPrice, totalQty, user?.uid, cartItems);
+    console.log("Validate Result:", JSON.stringify(result));
     
     if (result.success) {
       setAppliedCoupon({
