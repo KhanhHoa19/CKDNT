@@ -1,16 +1,19 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
+  runTransaction,
+  where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -76,11 +79,57 @@ export default function OrderListScreen({ navigation }) {
       const data = await response.json();
 
       if (data.success) {
-        // Xác nhận giao dịch ra hợp lệ → cập nhật refund_request thành "refunded"
-        await updateDoc(doc(db, "refund_requests", refundReq.id), {
-          status: "refunded",
-          confirmedAt: new Date().toISOString(),
-          txInfo: data.transaction,
+        // Tìm document đơn hàng thật theo orderId (mã hiển thị cho user)
+        const orderSnap = await getDocs(
+          query(collection(db, "orders"), where("orderId", "==", refundReq.orderId)),
+        );
+        if (orderSnap.empty) {
+          Alert.alert("Lỗi", "Không tìm thấy đơn hàng cần hoàn tiền để cộng lại tồn kho.");
+          return;
+        }
+        const orderDoc = orderSnap.docs[0];
+        const orderRef = doc(db, "orders", orderDoc.id);
+        const refundRef = doc(db, "refund_requests", refundReq.id);
+
+        // Cộng lại tồn kho + chốt trạng thái hoàn tiền trong cùng transaction
+        await runTransaction(db, async (transaction) => {
+          const refundDoc = await transaction.get(refundRef);
+          if (!refundDoc.exists()) throw new Error("Yêu cầu hoàn tiền không tồn tại.");
+
+          const refundData = refundDoc.data();
+          if (refundData?.status === "refunded") {
+            return; // idempotent: đã xử lý rồi thì không cộng lại lần nữa
+          }
+
+          const orderTxDoc = await transaction.get(orderRef);
+          if (!orderTxDoc.exists()) throw new Error("Đơn hàng không tồn tại.");
+          const orderData = orderTxDoc.data();
+          const items = Array.isArray(orderData?.items) ? orderData.items : [];
+
+          for (const item of items) {
+            const productId = item?.id;
+            const qty = Number(item?.qty || 0);
+            if (!productId || qty <= 0) continue;
+
+            const productRef = doc(db, "sanpham", productId);
+            const productDoc = await transaction.get(productRef);
+            if (!productDoc.exists()) continue;
+
+            const currentStock = Number(productDoc.data()?.soluong || 0);
+            transaction.update(productRef, { soluong: currentStock + qty });
+          }
+
+          transaction.update(refundRef, {
+            status: "refunded",
+            confirmedAt: new Date().toISOString(),
+            txInfo: data.transaction,
+            restockedAt: new Date().toISOString(),
+          });
+
+          transaction.update(orderRef, {
+            status: "cancelled",
+            refundedAt: new Date().toISOString(),
+          });
         });
 
         // Gửi email thông báo cho user
@@ -157,6 +206,26 @@ export default function OrderListScreen({ navigation }) {
       </View>
       <Text style={styles.userName}>👤 {item.userName}</Text>
       <Text style={styles.address}>📍 {item.deliveryAddress}</Text>
+      {!!item.items?.length && (
+        <View style={styles.itemPreviewWrap}>
+          {item.items.slice(0, 3).map((orderItem: any, idx: number) => (
+            <View key={`${orderItem.id || orderItem.idsanpham || idx}`} style={styles.itemPreview}>
+              {orderItem.hinhanh ? (
+                <Image source={{ uri: orderItem.hinhanh }} style={styles.itemPreviewImg} />
+              ) : (
+                <View style={[styles.itemPreviewImg, styles.itemPreviewFallback]}>
+                  <Text style={styles.itemPreviewFallbackText}>🍽️</Text>
+                </View>
+              )}
+            </View>
+          ))}
+          {item.items.length > 3 && (
+            <View style={styles.itemMoreBubble}>
+              <Text style={styles.itemMoreText}>+{item.items.length - 3}</Text>
+            </View>
+          )}
+        </View>
+      )}
       <View style={styles.cardBottom}>
         <Text style={styles.itemCount}>{item.items?.length} món</Text>
         <Text style={styles.total}>{formatPrice(item.total)}</Text>
@@ -363,6 +432,36 @@ const styles = StyleSheet.create({
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   userName: { fontSize: 14, color: "#2c3e50", marginBottom: 3 },
   address: { fontSize: 13, color: "#7f8c8d", marginBottom: 8 },
+  itemPreviewWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  itemPreview: { marginRight: 6 },
+  itemPreviewImg: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#ecf0f1",
+  },
+  itemPreviewFallback: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemPreviewFallbackText: { fontSize: 18 },
+  itemMoreBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#eef2f7",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemMoreText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7f8c8d",
+  },
   cardBottom: { flexDirection: "row", justifyContent: "space-between" },
   itemCount: { fontSize: 13, color: "#7f8c8d" },
   total: { fontSize: 15, fontWeight: "bold", color: "#e74c3c" },

@@ -38,6 +38,7 @@ export default function CheckoutBottomSheet({
 
   const [note, setNote] = useState("");
   const [qty, setQty] = useState(1);
+  const maxStock = Math.max(0, Number(product?.soluong || 0));
 
   const allImages = [product.hinhanh, ...(product.images || [])].filter(
     Boolean,
@@ -45,7 +46,9 @@ export default function CheckoutBottomSheet({
 
   // ── Xử lý thêm vào giỏ ──
   const handleAddToCart = () => {
-    for (let i = 0; i < qty; i++) {
+    if (maxStock <= 0) return;
+    const safeQty = Math.min(Math.max(1, qty), maxStock);
+    for (let i = 0; i < safeQty; i++) {
       addToCart({
         ...product,
         gia: finalPrice,
@@ -54,7 +57,7 @@ export default function CheckoutBottomSheet({
       });
     }
     onClose();
-    onSuccess?.({ qty, note });
+    onSuccess?.({ qty: safeQty, note });
   };
 
   return (
@@ -90,7 +93,7 @@ export default function CheckoutBottomSheet({
                 <Text style={styles.sheetSize}>Size: {selectedSize.label}</Text>
               )}
               <Text style={styles.sheetPrice}>
-                {formatPrice(finalPrice * qty)}
+                {formatPrice(finalPrice * Math.min(Math.max(1, qty), maxStock || 1))}
               </Text>
             </View>
           </View>
@@ -100,31 +103,52 @@ export default function CheckoutBottomSheet({
           <View style={styles.qtyRow}>
             <TouchableOpacity
               style={styles.qtyBtn}
-              onPress={() => setQty((v) => Math.max(1, v - 1))}
+              onPress={() => setQty((v) => Math.max(1, Math.min(maxStock || 1, v - 1)))}
+              disabled={maxStock <= 0}
             >
               <Text style={styles.qtyBtnText}>−</Text>
             </TouchableOpacity>
-            <Text style={styles.qtyValue}>{qty}</Text>
+            <TextInput
+              style={styles.qtyInput}
+              value={String(qty)}
+              onChangeText={(value) => {
+                const onlyDigits = value.replace(/[^0-9]/g, "");
+                if (!onlyDigits) {
+                  setQty(1);
+                  return;
+                }
+                const parsed = Number(onlyDigits);
+                setQty(Math.min(Math.max(1, parsed), maxStock || 1));
+              }}
+              keyboardType="number-pad"
+              textAlign="center"
+              editable={maxStock > 0}
+            />
             <TouchableOpacity
               style={[
                 styles.qtyBtn,
-                qty >= (product.soluong ?? Infinity) && styles.qtyBtnDisabled,
+                (qty >= maxStock || maxStock <= 0) && styles.qtyBtnDisabled,
               ]}
               onPress={() => {
-                if (qty < (product.soluong ?? Infinity)) setQty((v) => v + 1);
+                if (qty < maxStock) setQty((v) => v + 1);
               }}
-              disabled={qty >= (product.soluong ?? Infinity)}
+              disabled={qty >= maxStock || maxStock <= 0}
             >
               <Text
                 style={[
                   styles.qtyBtnText,
-                  qty >= (product.soluong ?? Infinity) && { color: "#ccc" },
+                  (qty >= maxStock || maxStock <= 0) && { color: "#ccc" },
                 ]}
               >
                 +
               </Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.stockHint}>
+            {maxStock > 0
+              ? `Còn lại: ${maxStock} phần`
+              : "Số lượng: 0 - đơn hàng đã hết"}
+          </Text>
 
           {/* Lời nhắn */}
           <Text style={styles.sectionLabel}>Lời nhắn cho quán</Text>
@@ -142,17 +166,18 @@ export default function CheckoutBottomSheet({
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tổng cộng</Text>
             <Text style={styles.totalValue}>
-              {formatPrice(finalPrice * qty)}
+              {formatPrice(finalPrice * Math.min(Math.max(1, qty), maxStock || 1))}
             </Text>
           </View>
 
           {/* Nút xác nhận */}
           <TouchableOpacity
-            style={styles.confirmBtn}
+            style={[styles.confirmBtn, maxStock <= 0 && styles.confirmBtnDisabled]}
             onPress={handleAddToCart}
+            disabled={maxStock <= 0}
           >
             <Text style={styles.confirmBtnText}>
-              🛒 Thêm vào giỏ hàng
+              {maxStock <= 0 ? "Đơn hàng đã hết" : "🛒 Thêm vào giỏ hàng"}
             </Text>
           </TouchableOpacity>
           <View style={{ height: 20 }} />
@@ -244,7 +269,20 @@ const styles = StyleSheet.create({
     borderColor: "#eee",
   },
   qtyBtnText: { fontSize: 20, color: "#333", fontWeight: "bold" },
-  qtyValue: { marginHorizontal: 20, fontSize: 18, fontWeight: "700" },
+  qtyInput: {
+    width: 72,
+    height: 40,
+    marginHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#e6e6e6",
+    borderRadius: 10,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+  },
+  stockHint: { marginTop: 8, fontSize: 12, color: "#777" },
 
   paymentRow: {
     flexDirection: "row",
@@ -325,5 +363,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
   },
+  confirmBtnDisabled: { backgroundColor: "#c9c9c9" },
   confirmBtnText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 });

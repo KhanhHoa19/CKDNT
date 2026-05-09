@@ -1,5 +1,11 @@
-import { addDoc, collection } from "firebase/firestore";
-import { useState } from "react";
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  runTransaction,
+} from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +19,8 @@ import {
   Modal,
   TextInput,
 } from "react-native";
+import * as MediaLibrary from "expo-media-library";
+import { captureRef } from "react-native-view-shot";
 import uuid from "react-native-uuid";
 import { db } from "../../config/firebase";
 import { useAuth } from "../../context/AuthContext";
@@ -32,6 +40,9 @@ export default function CartScreen({ navigation }) {
   const [inputOtp, setInputOtp] = useState("");
   const [currentOrderId, setCurrentOrderId] = useState("");
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [savingQR, setSavingQR] = useState(false);
+  const qrRef = useRef(null);
+  const [liveStockMap, setLiveStockMap] = useState({});
 
   // Thay IP này bằng IPv4 máy tính của bạn (VD: 192.168.1.x)
   const SERVER_URL = "http://192.168.101.27:3000"; 
@@ -46,11 +57,68 @@ export default function CartScreen({ navigation }) {
       currency: "VND",
     }).format(p);
 
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      setLiveStockMap({});
+      return;
+    }
+
+    const unsubscribers = [];
+    const nextMap = {};
+
+    cartItems.forEach((item) => {
+      if (!item.id) return;
+      const unsub = onSnapshot(doc(db, "sanpham", item.id), (snap) => {
+        if (snap.exists()) {
+          nextMap[item.id] = Number(snap.data()?.soluong || 0);
+          setLiveStockMap((prev) => ({ ...prev, [item.id]: nextMap[item.id] }));
+        } else {
+          setLiveStockMap((prev) => ({ ...prev, [item.id]: 0 }));
+        }
+      });
+      unsubscribers.push(unsub);
+    });
+
+    return () => unsubscribers.forEach((unsub) => unsub());
+  }, [cartItems]);
+
+  const getAvailableStock = (item) =>
+    liveStockMap[item.id] !== undefined
+      ? liveStockMap[item.id]
+      : Number(item.soluong ?? 0);
+
   const placeOrder = async (method, isPaid = false, orderIdToUse) => {
     setLoading(true);
     const finalOrderId = orderIdToUse || uuid.v4();
     try {
-      // 1. Lưu đơn hàng
+      // 0. Gom số lượng theo sản phẩm để trừ kho chính xác 1 lần/sản phẩm
+      const qtyByProduct = cartItems.reduce((acc, item) => {
+        if (!item.id) return acc;
+        acc[item.id] = (acc[item.id] || 0) + Number(item.qty || 0);
+        return acc;
+      }, {});
+
+      // 1. Trừ kho atomically để đồng bộ cho mọi phiên đăng nhập
+      await runTransaction(db, async (transaction) => {
+        for (const [productId, qtyNeed] of Object.entries(qtyByProduct)) {
+          const productRef = doc(db, "sanpham", productId);
+          const productSnap = await transaction.get(productRef);
+          if (!productSnap.exists()) {
+            throw new Error("Sản phẩm không còn tồn tại.");
+          }
+          const currentStock = Number(productSnap.data()?.soluong || 0);
+          if (qtyNeed > currentStock) {
+            throw new Error(
+              `Sản phẩm "${productSnap.data()?.tensp || "không xác định"}" chỉ còn ${currentStock} phần.`,
+            );
+          }
+          transaction.update(productRef, {
+            soluong: currentStock - qtyNeed,
+          });
+        }
+      });
+
+      // 2. Lưu đơn hàng
       await addDoc(collection(db, "orders"), {
         orderId: finalOrderId,
         userId: user.uid,
@@ -77,7 +145,7 @@ export default function CartScreen({ navigation }) {
         createdAt: new Date().toISOString(),
       });
 
-      // 2. Nếu chuyển khoản -> Lưu vào bảng mới hoàn toàn (payment_histories) để đối chiếu
+      // 3. Nếu chuyển khoản -> Lưu vào bảng mới hoàn toàn (payment_histories) để đối chiếu
       if (method === "bank" && isPaid) {
         await addDoc(collection(db, "payment_histories"), {
           paymentId: uuid.v4(),
@@ -112,7 +180,7 @@ export default function CartScreen({ navigation }) {
           createdAt: new Date().toISOString(),
         });
 
-        // 3. Gửi email xác nhận
+        // 4. Gửi email xác nhận
         try {
           await fetch(`${SERVER_URL}/send-email`, {
             method: "POST",
@@ -161,6 +229,24 @@ export default function CartScreen({ navigation }) {
       Alert.alert(
         "Chưa có địa chỉ",
         "Vui lòng cập nhật địa chỉ giao hàng trong Profile trước khi đặt hàng.",
+      );
+      return;
+    }
+
+    const outOfStockItems = cartItems.filter((item) => getAvailableStock(item) <= 0);
+    if (outOfStockItems.length > 0) {
+      Alert.alert(
+        "Đơn hàng đã hết",
+        `Một số món đã hết hàng: ${outOfStockItems.map((i) => i.tensp).join(", ")}.`,
+      );
+      return;
+    }
+
+    const overItems = cartItems.filter((item) => item.qty > getAvailableStock(item));
+    if (overItems.length > 0) {
+      Alert.alert(
+        "Vượt số lượng tồn kho",
+        `Vui lòng giảm số lượng. Món vượt tồn: ${overItems.map((i) => i.tensp).join(", ")}.`,
       );
       return;
     }
@@ -236,6 +322,35 @@ export default function CartScreen({ navigation }) {
     }
   };
 
+  // Lưu mã QR vào đầu bộ sưu tập ảnh
+  const saveQRToGallery = async () => {
+    setSavingQR(true);
+    try {
+      // Xin quyền GHI ảnh (writeOnly=true → không yêu cầu quyền Audio, tránh lỗi Expo Go)
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
+      if (status !== "granted") {
+        Alert.alert("Cần quyền truy cập", "Vui lòng cấp quyền truy cập thư viện ảnh để lưu mã QR.");
+        return;
+      }
+
+      // Chụp ảnh component QR
+      const uri = await captureRef(qrRef, {
+        format: "png",
+        quality: 1.0,
+      });
+
+      // Lưu thẳng vào bộ sưu tập (chỉ cần quyền Write, không bị lỗi Missing permission)
+      await MediaLibrary.saveToLibraryAsync(uri);
+
+      Alert.alert("✅ Đã lưu!", "Mã QR đã được lưu vào bộ sưu tập ảnh của bạn.");
+    } catch (e) {
+      console.error("Lỗi lưu QR:", e);
+      Alert.alert("Lỗi", "Không thể lưu mã QR: " + e.message);
+    } finally {
+      setSavingQR(false);
+    }
+  };
+
   const renderItem = ({ item }) => (
     <View style={styles.item}>
       <View style={styles.checkbox}>
@@ -253,6 +368,11 @@ export default function CartScreen({ navigation }) {
           {item.tensp}
         </Text>
         <Text style={styles.itemPrice}>{formatPrice(item.gia * item.qty)}</Text>
+        <Text style={styles.stockInline}>
+          {getAvailableStock(item) > 0
+            ? `Còn ${getAvailableStock(item)} phần`
+            : "Số lượng: 0 - đơn hàng đã hết"}
+        </Text>
         <View style={styles.qtyRow}>
           <TouchableOpacity
             style={styles.qtyBtn}
@@ -260,10 +380,32 @@ export default function CartScreen({ navigation }) {
           >
             <Text style={styles.qtyBtnText}>−</Text>
           </TouchableOpacity>
-          <Text style={styles.qty}>{item.qty}</Text>
+          <TextInput
+            style={styles.qtyInput}
+            value={String(item.qty)}
+            onChangeText={(value) => {
+              const onlyDigits = value.replace(/[^0-9]/g, "");
+              if (!onlyDigits) {
+                updateQty(item.id, 1);
+                return;
+              }
+              const num = Number(onlyDigits);
+              const maxStock = Math.max(0, getAvailableStock(item));
+              updateQty(item.id, Math.min(Math.max(1, num), maxStock || 1));
+            }}
+            keyboardType="number-pad"
+            textAlign="center"
+            editable={getAvailableStock(item) > 0}
+          />
           <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => updateQty(item.id, item.qty + 1)}
+            style={[
+              styles.qtyBtn,
+              item.qty >= getAvailableStock(item) && { opacity: 0.45 },
+            ]}
+            onPress={() =>
+              item.qty < getAvailableStock(item) && updateQty(item.id, item.qty + 1)
+            }
+            disabled={item.qty >= getAvailableStock(item)}
           >
             <Text style={styles.qtyBtnText}>+</Text>
           </TouchableOpacity>
@@ -455,10 +597,25 @@ export default function CartScreen({ navigation }) {
             <Text style={styles.modalDesc}>Vui lòng quét mã QR qua ứng dụng ngân hàng để thanh toán {formatPrice(total)}</Text>
             
             {/* Thay BANK_BIN bằng mã Ngân hàng (VD: Vietcombank = 970436) và STK của bạn */}
-            <Image
-              source={{ uri: `https://img.vietqr.io/image/970422-3083737857829-compact2.png?amount=${total}&addInfo=${currentOrderId}&accountName=DO%20XUAN%20HAI` }}
-              style={{ width: 250, height: 250, alignSelf: 'center', marginVertical: 16 }}
-            />
+            <View ref={qrRef} style={styles.qrWrapper} collapsable={false}>
+              <Image
+                source={{ uri: `https://img.vietqr.io/image/970422-3083737857829-compact2.png?amount=${total}&addInfo=${currentOrderId}&accountName=DO%20XUAN%20HAI` }}
+                style={{ width: 230, height: 230 }}
+              />
+              <Text style={styles.qrAmountLabel}>{formatPrice(total)}</Text>
+              <Text style={styles.qrOrderLabel}>#{currentOrderId}</Text>
+            </View>
+
+            {/* Nút lưu QR */}
+            <TouchableOpacity
+              style={[styles.saveQrBtn, savingQR && { opacity: 0.6 }]}
+              onPress={saveQRToGallery}
+              disabled={savingQR}
+            >
+              <Text style={styles.saveQrBtnText}>
+                {savingQR ? "⏳ Đang lưu..." : "💾 Lưu mã QR"}
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.orderBtn, checkingPayment && { backgroundColor: "#ccc" }]} 
@@ -570,7 +727,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   qtyBtnText: { fontSize: 16, color: "#333" },
-  qty: { marginHorizontal: 14, fontSize: 15, fontWeight: "700" },
+  qtyInput: {
+    width: 52,
+    height: 30,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1a1a1a",
+    paddingHorizontal: 4,
+  },
+  stockInline: { fontSize: 11, color: "#888", marginBottom: 6 },
 
   summary: {
     backgroundColor: "#fff",
@@ -719,4 +889,48 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   confirmBtnText: { color: "#fff", fontWeight: "bold" },
+
+  // QR wrapper (bọc ảnh QR + text để chụp)
+  qrWrapper: {
+    alignItems: "center",
+    backgroundColor: "#fff",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  qrAmountLabel: {
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#FF6B35",
+  },
+  qrOrderLabel: {
+    fontSize: 11,
+    color: "#aaa",
+    marginTop: 2,
+    letterSpacing: 1,
+  },
+
+  // Nút lưu QR
+  saveQrBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f9ff",
+    borderWidth: 1.5,
+    borderColor: "#3498db",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+    gap: 6,
+  },
+  saveQrBtnText: {
+    color: "#3498db",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 });

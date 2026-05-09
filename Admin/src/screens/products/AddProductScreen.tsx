@@ -95,6 +95,10 @@ export default function AddProductScreen({ navigation }) {
       Alert.alert("Lỗi", "Giá phải là số dương");
       return;
     }
+    if (isNaN(Number(soluong)) || Number(soluong) < 0) {
+      Alert.alert("Lỗi", "Số lượng tồn kho phải từ 0 trở lên");
+      return;
+    }
     setLoading(true);
     let hinhanh = "";
     let images = [];
@@ -295,11 +299,24 @@ export default function AddProductScreen({ navigation }) {
           <View style={styles.qtyRow}>
             <TouchableOpacity
               style={styles.qtyBtn}
-              onPress={() => setSoluong((v) => Math.max(1, v - 1))}
+              onPress={() => setSoluong((v) => Math.max(0, v - 1))}
             >
               <Text style={styles.qtyBtnText}>−</Text>
             </TouchableOpacity>
-            <Text style={styles.qtyValue}>{soluong}</Text>
+            <TextInput
+              style={styles.qtyInput}
+              value={String(soluong)}
+              onChangeText={(value) => {
+                const onlyDigits = value.replace(/[^0-9]/g, "");
+                if (!onlyDigits) {
+                  setSoluong(0);
+                  return;
+                }
+                setSoluong(Number(onlyDigits));
+              }}
+              keyboardType="numeric"
+              textAlign="center"
+            />
             <TouchableOpacity
               style={styles.qtyBtn}
               onPress={() => setSoluong((v) => v + 1)}
@@ -465,8 +482,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f2f5",
   },
   qtyBtnText: { fontSize: 22, color: "#2c3e50", fontWeight: "bold" },
-  qtyValue: {
-    width: 56,
+  qtyInput: {
+    width: 70,
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#fff",
     textAlign: "center",
     fontSize: 18,
     fontWeight: "700",
