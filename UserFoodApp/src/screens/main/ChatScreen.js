@@ -61,7 +61,7 @@ export default function ChatScreen() {
       // LƯU Ý KHI LÊN PRODUCTION: 
       // Xóa chữ "-test" trong URL dưới đây thành /webhook/a6fa...
       // Và nhớ bật công tắc Active (Góc phải trên cùng) trong n8n.
-      const N8N_WEBHOOK_URL = 'https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook-test/a6fa15ad-549b-4397-91f8-80186a6a6b84';
+      const N8N_WEBHOOK_URL = 'https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook/a6fa15ad-549b-4397-91f8-80186a6a6b84';
 
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
