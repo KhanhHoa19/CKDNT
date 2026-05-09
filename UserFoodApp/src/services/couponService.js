@@ -9,7 +9,7 @@ import { db } from "../config/firebase";
  * @param {string} userId - ID of the user applying the coupon
  * @returns {Promise<{success: boolean, message: string, discountAmount?: number, couponId?: string}>}
  */
-export const validateCoupon = async (code, cartTotal, totalItems, userId) => {
+export const validateCoupon = async (code, cartTotal, totalItems, userId, cartItems = []) => {
   if (!code) return { success: false, message: "Vui lòng nhập mã giảm giá" };
   if (!userId) return { success: false, message: "Lỗi xác thực người dùng" };
 
@@ -67,21 +67,36 @@ export const validateCoupon = async (code, cartTotal, totalItems, userId) => {
       return { success: false, message: "Mã giảm giá đã hết lượt sử dụng" };
     }
 
-    // 4. Check minimum order value
-    if (couponData.minOrderValue && cartTotal < couponData.minOrderValue) {
-      return { success: false, message: `Đơn hàng tối thiểu để áp dụng là ${new Intl.NumberFormat("vi-VN").format(couponData.minOrderValue)}đ` };
+    // 4. Lọc sản phẩm áp dụng (nếu coupon có chỉ định applicableProducts)
+    const hasFilter = couponData.applicableProducts && couponData.applicableProducts.length > 0;
+    let discountBase = cartTotal; // mặc định tính trên toàn giỏ
+    let checkQty = totalItems;
+
+    if (hasFilter && cartItems.length > 0) {
+      const matched = cartItems.filter(item =>
+        couponData.applicableProducts.includes(item.idsanpham || item.id)
+      );
+      if (matched.length === 0) {
+        return { success: false, message: "Mã giảm giá này không áp dụng cho sản phẩm trong giỏ hàng" };
+      }
+      discountBase = matched.reduce((s, i) => s + ((i.gia || 0) * (i.qty || 1)), 0);
+      checkQty = matched.reduce((s, i) => s + (i.qty || 1), 0);
     }
 
-    // 5. Check minimum items
-    if (couponData.minItems && totalItems < couponData.minItems) {
-      return { success: false, message: `Cần mua tối thiểu ${couponData.minItems} sản phẩm để áp dụng mã này` };
+    // 5. Check minimum order value (tổng toàn đơn)
+    if (couponData.minOrderValue && cartTotal < couponData.minOrderValue) {
+      return { success: false, message: `Đơn hàng tối thiểu là ${new Intl.NumberFormat("vi-VN").format(couponData.minOrderValue)}đ` };
+    }
+
+    // 6. Check minimum items (chỉ tính SP áp dụng)
+    if (couponData.minItems && checkQty < couponData.minItems) {
+      return { success: false, message: `Cần tối thiểu ${couponData.minItems} sản phẩm${hasFilter ? " áp dụng" : ""} để dùng mã này` };
     }
 
     // All checks passed, calculate discount
     let discountAmount = 0;
     if (couponData.discountType === "percent") {
-      discountAmount = Math.round((cartTotal * couponData.discountValue) / 100);
-      // Optional: limit max discount if property exists e.g. maxDiscountValue
+      discountAmount = Math.round((discountBase * couponData.discountValue) / 100);
       if (couponData.maxDiscountValue && discountAmount > couponData.maxDiscountValue) {
         discountAmount = couponData.maxDiscountValue;
       }
@@ -89,9 +104,9 @@ export const validateCoupon = async (code, cartTotal, totalItems, userId) => {
       discountAmount = couponData.discountValue;
     }
 
-    // Ensure we don't discount more than the cart total
-    if (discountAmount > cartTotal) {
-      discountAmount = cartTotal;
+    // Không giảm nhiều hơn phần sản phẩm áp dụng
+    if (discountAmount > discountBase) {
+      discountAmount = discountBase;
     }
 
     return { 
