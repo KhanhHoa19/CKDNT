@@ -2,6 +2,9 @@ import {
   addDoc,
   collection,
   doc,
+  updateDoc,
+  increment,
+  arrayUnion,
   onSnapshot,
   runTransaction,
 } from "firebase/firestore";
@@ -25,6 +28,7 @@ import uuid from "react-native-uuid";
 import { db } from "../../config/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
+import { validateCoupon } from "../../services/couponService";
 
 export default function CartScreen({ navigation }) {
   const { cartItems, updateQty, removeFromCart, clearCart, totalPrice } =
@@ -40,16 +44,25 @@ export default function CartScreen({ navigation }) {
   const [inputOtp, setInputOtp] = useState("");
   const [currentOrderId, setCurrentOrderId] = useState("");
   const [checkingPayment, setCheckingPayment] = useState(false);
+  
+  // States cho Tồn kho và QR (Local)
   const [savingQR, setSavingQR] = useState(false);
   const qrRef = useRef(null);
   const [liveStockMap, setLiveStockMap] = useState({});
 
+  // States cho coupon (Main)
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   // Thay IP này bằng IPv4 máy tính của bạn (VD: 192.168.1.x)
   const SERVER_URL = "http://192.168.101.27:3000"; 
 
+  // Tính tiền kết hợp
   const deliveryFee = 0;
-  const discount = cartItems.length > 0 ? Math.round(totalPrice * 0.1) : 0;
-  const total = totalPrice - discount + deliveryFee;
+  const discount = appliedCoupon ? appliedCoupon.discountAmount : 0;
+  const total = totalPrice - discount + deliveryFee > 0 ? totalPrice - discount + deliveryFee : 0;
 
   const formatPrice = (p) =>
     new Intl.NumberFormat("vi-VN", {
@@ -57,6 +70,7 @@ export default function CartScreen({ navigation }) {
       currency: "VND",
     }).format(p);
 
+  // Lắng nghe Tồn kho Realtime (Local)
   useEffect(() => {
     if (cartItems.length === 0) {
       setLiveStockMap({});
@@ -87,18 +101,47 @@ export default function CartScreen({ navigation }) {
       ? liveStockMap[item.id]
       : Number(item.soluong ?? 0);
 
+  // Xử lý Coupon (Main)
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setValidatingCoupon(true);
+    setCouponError("");
+    
+    console.log("=== COUPON DEBUG ===");
+    console.log("Code:", couponCode);
+    console.log("Total Price:", totalPrice);
+    const totalQty = cartItems.reduce((sum, item) => sum + (item.qty || 1), 0);
+    console.log("Total Qty:", totalQty);
+    console.log("User ID:", user?.uid);
+    const result = await validateCoupon(couponCode, totalPrice, totalQty, user?.uid, cartItems);
+    console.log("Validate Result:", JSON.stringify(result));
+    
+    if (result.success) {
+      setAppliedCoupon({
+        code: result.code,
+        discountAmount: result.discountAmount,
+        couponId: result.couponId
+      });
+      Alert.alert("Thành công", result.message);
+    } else {
+      setAppliedCoupon(null);
+      setCouponError(result.message);
+    }
+    setValidatingCoupon(false);
+  };
+
   const placeOrder = async (method, isPaid = false, orderIdToUse) => {
     setLoading(true);
     const finalOrderId = orderIdToUse || uuid.v4();
     try {
-      // 0. Gom số lượng theo sản phẩm để trừ kho chính xác 1 lần/sản phẩm
+      // 1. Gom số lượng theo sản phẩm để trừ kho chính xác (Local)
       const qtyByProduct = cartItems.reduce((acc, item) => {
         if (!item.id) return acc;
         acc[item.id] = (acc[item.id] || 0) + Number(item.qty || 0);
         return acc;
       }, {});
 
-      // 1. Trừ kho atomically để đồng bộ cho mọi phiên đăng nhập
+      // 2. Trừ kho atomically (Local)
       await runTransaction(db, async (transaction) => {
         for (const [productId, qtyNeed] of Object.entries(qtyByProduct)) {
           const productRef = doc(db, "sanpham", productId);
@@ -109,7 +152,7 @@ export default function CartScreen({ navigation }) {
           const currentStock = Number(productSnap.data()?.soluong || 0);
           if (qtyNeed > currentStock) {
             throw new Error(
-              `Sản phẩm "${productSnap.data()?.tensp || "không xác định"}" chỉ còn ${currentStock} phần.`,
+              `Sản phẩm "${productSnap.data()?.tensp || "không xác định"}" chỉ còn ${currentStock} phần.`
             );
           }
           transaction.update(productRef, {
@@ -118,7 +161,7 @@ export default function CartScreen({ navigation }) {
         }
       });
 
-      // 2. Lưu đơn hàng
+      // 3. Lưu đơn hàng (Kết hợp cả Stock & Coupon)
       await addDoc(collection(db, "orders"), {
         orderId: finalOrderId,
         userId: user.uid,
@@ -139,28 +182,37 @@ export default function CartScreen({ navigation }) {
         deliveryFee,
         discount,
         total,
+        appliedCoupon: appliedCoupon ? appliedCoupon.code : null, // Từ Main
         paymentMethod: method,
         isPaid,
-        status: "pending", // Phải dùng 'pending' để Admin thấy trong tab Chờ duyệt
+        status: "pending", 
         createdAt: new Date().toISOString(),
       });
 
-      // 3. Nếu chuyển khoản -> Lưu vào bảng mới hoàn toàn (payment_histories) để đối chiếu
+      // 4. Cập nhật lượt sử dụng coupon (Từ Main)
+      if (appliedCoupon && appliedCoupon.couponId) {
+        try {
+          await updateDoc(doc(db, "magiamgia", appliedCoupon.couponId), {
+            usageCount: increment(1),
+            usedBy: arrayUnion(user.uid)
+          });
+        } catch (e) {
+          console.error("Lỗi khi update coupon usage:", e);
+        }
+      }
+
+      // 5. Nếu chuyển khoản -> Lưu lịch sử bank (Kết hợp)
       if (method === "bank" && isPaid) {
         await addDoc(collection(db, "payment_histories"), {
           paymentId: uuid.v4(),
           orderId: finalOrderId,
           userId: user.uid,
-          
-          // Lấy thông tin người dùng (từ profiles)
           customerInfo: {
             fullName: userProfile?.fullName || "",
             email: user.email,
             phone: userProfile?.phone || "",
             address: userProfile?.address1 || "Chưa có địa chỉ",
           },
-
-          // Lấy thông tin đơn hàng (từ orders)
           orderSummary: {
             totalItems: cartItems.length,
             items: cartItems.map((i) => ({
@@ -173,14 +225,14 @@ export default function CartScreen({ navigation }) {
             deliveryFee: deliveryFee,
             discount: discount,
             amountPaid: total,
+            appliedCoupon: appliedCoupon ? appliedCoupon.code : null, // Từ Main
           },
-
           paymentMethod: "bank_transfer",
           status: "completed",
           createdAt: new Date().toISOString(),
         });
 
-        // 4. Gửi email xác nhận
+        // Gửi email xác nhận
         try {
           await fetch(`${SERVER_URL}/send-email`, {
             method: "POST",
@@ -201,6 +253,9 @@ export default function CartScreen({ navigation }) {
       }
 
       clearCart();
+      setAppliedCoupon(null);
+      setCouponCode("");
+      
       Alert.alert(
         "🎉 Đặt hàng thành công!",
         "Đơn hàng đã được gửi đến admin. Vui lòng chờ xác nhận.",
@@ -233,6 +288,7 @@ export default function CartScreen({ navigation }) {
       return;
     }
 
+    // Xác thực Tồn kho (Local)
     const outOfStockItems = cartItems.filter((item) => getAvailableStock(item) <= 0);
     if (outOfStockItems.length > 0) {
       Alert.alert(
@@ -322,26 +378,20 @@ export default function CartScreen({ navigation }) {
     }
   };
 
-  // Lưu mã QR vào đầu bộ sưu tập ảnh
+  // Lưu mã QR vào thiết bị (Local)
   const saveQRToGallery = async () => {
     setSavingQR(true);
     try {
-      // Xin quyền GHI ảnh (writeOnly=true → không yêu cầu quyền Audio, tránh lỗi Expo Go)
       const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== "granted") {
         Alert.alert("Cần quyền truy cập", "Vui lòng cấp quyền truy cập thư viện ảnh để lưu mã QR.");
         return;
       }
-
-      // Chụp ảnh component QR
       const uri = await captureRef(qrRef, {
         format: "png",
         quality: 1.0,
       });
-
-      // Lưu thẳng vào bộ sưu tập (chỉ cần quyền Write, không bị lỗi Missing permission)
       await MediaLibrary.saveToLibraryAsync(uri);
-
       Alert.alert("✅ Đã lưu!", "Mã QR đã được lưu vào bộ sưu tập ảnh của bạn.");
     } catch (e) {
       console.error("Lỗi lưu QR:", e);
@@ -368,6 +418,8 @@ export default function CartScreen({ navigation }) {
           {item.tensp}
         </Text>
         <Text style={styles.itemPrice}>{formatPrice(item.gia * item.qty)}</Text>
+        
+        {/* Lấy UI Stock từ Local */}
         <Text style={styles.stockInline}>
           {getAvailableStock(item) > 0
             ? `Còn ${getAvailableStock(item)} phần`
@@ -422,7 +474,6 @@ export default function CartScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Header với nút xem lịch sử */}
       <View style={styles.header}>
         <View>
           <Text style={styles.locLabel}>DELIVERY LOCATION</Text>
@@ -442,7 +493,6 @@ export default function CartScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ✅ Nút xem lịch sử đơn hàng */}
         <TouchableOpacity
           style={styles.historyBtn}
           onPress={() => navigation.navigate("OrderHistory")}
@@ -472,6 +522,45 @@ export default function CartScreen({ navigation }) {
               renderItem={renderItem}
               scrollEnabled={false}
             />
+
+              {/* Lấy UI Coupon từ Main */}
+              <View style={styles.couponContainer}>
+                <Text style={styles.summaryTitle}>Mã giảm giá</Text>
+                <View style={styles.couponInputRow}>
+                  <TextInput
+                    style={styles.couponInput}
+                    placeholder="Nhập mã giảm giá"
+                    value={couponCode}
+                    onChangeText={(text) => {
+                      setCouponCode(text);
+                      setCouponError("");
+                    }}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity 
+                    style={[styles.applyCouponBtn, (!couponCode.trim() || validatingCoupon) && {backgroundColor: "#ccc"}]} 
+                    onPress={handleApplyCoupon}
+                    disabled={validatingCoupon || !couponCode.trim()}
+                  >
+                    {validatingCoupon ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.applyCouponText}>Áp dụng</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                {couponError ? <Text style={styles.couponErrorText}>{couponError}</Text> : null}
+                {appliedCoupon ? (
+                  <View style={styles.appliedCouponRow}>
+                    <Text style={styles.appliedCouponText}>
+                      Đã áp dụng mã: <Text style={{fontWeight: "bold"}}>{appliedCoupon.code}</Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => { setAppliedCoupon(null); setCouponCode(""); }}>
+                      <Text style={styles.removeCouponText}>Xóa</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
 
               {/* Payment Method Selection */}
               <View style={styles.methodContainer}>
@@ -589,14 +678,13 @@ export default function CartScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Modal QR Code */}
+      {/* Modal QR Code (Lấy từ Local để có nút Save QR) */}
       <Modal visible={qrModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Quét mã thanh toán</Text>
             <Text style={styles.modalDesc}>Vui lòng quét mã QR qua ứng dụng ngân hàng để thanh toán {formatPrice(total)}</Text>
             
-            {/* Thay BANK_BIN bằng mã Ngân hàng (VD: Vietcombank = 970436) và STK của bạn */}
             <View ref={qrRef} style={styles.qrWrapper} collapsable={false}>
               <Image
                 source={{ uri: `https://img.vietqr.io/image/970422-3083737857829-compact2.png?amount=${total}&addInfo=${currentOrderId}&accountName=DO%20XUAN%20HAI` }}
@@ -606,7 +694,6 @@ export default function CartScreen({ navigation }) {
               <Text style={styles.qrOrderLabel}>#{currentOrderId}</Text>
             </View>
 
-            {/* Nút lưu QR */}
             <TouchableOpacity
               style={[styles.saveQrBtn, savingQR && { opacity: 0.6 }]}
               onPress={saveQRToGallery}
@@ -667,7 +754,6 @@ const styles = StyleSheet.create({
   },
   changeBtnText: { color: "#FF6B35", fontSize: 11, fontWeight: "600" },
 
-  // ✅ Nút lịch sử
   historyBtn: { alignItems: "center" },
   historyIcon: { fontSize: 24 },
   historyText: {
@@ -795,6 +881,68 @@ const styles = StyleSheet.create({
   },
   viewHistoryText: { color: "#FF6B35", fontWeight: "600", fontSize: 14 },
   
+  // Custom Styles cho Coupon (Từ Main)
+  couponContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 20,
+    elevation: 2,
+  },
+  couponInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  couponInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginRight: 10,
+    color: "#333",
+  },
+  applyCouponBtn: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  applyCouponText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  couponErrorText: {
+    color: "#e74c3c",
+    fontSize: 13,
+    marginTop: 8,
+    marginLeft: 4,
+  },
+  appliedCouponRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  appliedCouponText: {
+    color: "#27ae60",
+    fontSize: 14,
+  },
+  removeCouponText: {
+    color: "#e74c3c",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   // Custom Styles cho Method & Modal
   methodContainer: {
     backgroundColor: "#fff",
@@ -890,7 +1038,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: { color: "#fff", fontWeight: "bold" },
 
-  // QR wrapper (bọc ảnh QR + text để chụp)
+  // QR wrapper (Từ Local)
   qrWrapper: {
     alignItems: "center",
     backgroundColor: "#fff",
@@ -913,8 +1061,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 1,
   },
-
-  // Nút lưu QR
   saveQrBtn: {
     flexDirection: "row",
     alignItems: "center",
