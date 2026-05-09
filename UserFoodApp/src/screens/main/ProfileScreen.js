@@ -34,7 +34,7 @@ export default function ProfileScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-       
+
       </View>
 
       {/* Avatar */}

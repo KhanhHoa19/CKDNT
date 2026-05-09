@@ -9,6 +9,8 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
+import { addDoc, collection, doc, updateDoc, increment, arrayUnion } from "firebase/firestore";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -56,6 +58,12 @@ export default function CartScreen({ navigation }) {
   const [couponError, setCouponError] = useState("");
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
+  // States cho coupon
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   // Thay IP này bằng IPv4 máy tính của bạn (VD: 192.168.1.x)
   const SERVER_URL = "http://192.168.101.27:3000"; 
 
@@ -63,6 +71,34 @@ export default function CartScreen({ navigation }) {
   const deliveryFee = 0;
   const discount = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const total = totalPrice - discount + deliveryFee > 0 ? totalPrice - discount + deliveryFee : 0;
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setValidatingCoupon(true);
+    setCouponError("");
+    
+    console.log("=== COUPON DEBUG ===");
+    console.log("Code:", couponCode);
+    console.log("Total Price:", totalPrice);
+    const totalQty = cartItems.reduce((sum, item) => sum + (item.qty || 1), 0);
+    console.log("Total Qty:", totalQty);
+    console.log("User ID:", user?.uid);
+    const result = await validateCoupon(couponCode, totalPrice, totalQty, user?.uid, cartItems);
+    console.log("Validate Result:", JSON.stringify(result));
+    
+    if (result.success) {
+      setAppliedCoupon({
+        code: result.code,
+        discountAmount: result.discountAmount,
+        couponId: result.couponId
+      });
+      Alert.alert("Thành công", result.message);
+    } else {
+      setAppliedCoupon(null);
+      setCouponError(result.message);
+    }
+    setValidatingCoupon(false);
+  };
 
   const formatPrice = (p) =>
     new Intl.NumberFormat("vi-VN", {
@@ -182,14 +218,14 @@ export default function CartScreen({ navigation }) {
         deliveryFee,
         discount,
         total,
-        appliedCoupon: appliedCoupon ? appliedCoupon.code : null, // Từ Main
+        appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
         paymentMethod: method,
         isPaid,
         status: "pending", 
         createdAt: new Date().toISOString(),
       });
 
-      // 4. Cập nhật lượt sử dụng coupon (Từ Main)
+      // 1.5. Cập nhật lượt sử dụng coupon và danh sách user đã dùng
       if (appliedCoupon && appliedCoupon.couponId) {
         try {
           await updateDoc(doc(db, "magiamgia", appliedCoupon.couponId), {
@@ -201,7 +237,7 @@ export default function CartScreen({ navigation }) {
         }
       }
 
-      // 5. Nếu chuyển khoản -> Lưu lịch sử bank (Kết hợp)
+      // 2. Nếu chuyển khoản -> Lưu vào bảng mới hoàn toàn (payment_histories) để đối chiếu
       if (method === "bank" && isPaid) {
         await addDoc(collection(db, "payment_histories"), {
           paymentId: uuid.v4(),
@@ -225,7 +261,7 @@ export default function CartScreen({ navigation }) {
             deliveryFee: deliveryFee,
             discount: discount,
             amountPaid: total,
-            appliedCoupon: appliedCoupon ? appliedCoupon.code : null, // Từ Main
+            appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
           },
           paymentMethod: "bank_transfer",
           status: "completed",
@@ -523,7 +559,7 @@ export default function CartScreen({ navigation }) {
               scrollEnabled={false}
             />
 
-              {/* Lấy UI Coupon từ Main */}
+              {/* Coupon Input */}
               <View style={styles.couponContainer}>
                 <Text style={styles.summaryTitle}>Mã giảm giá</Text>
                 <View style={styles.couponInputRow}>
@@ -881,7 +917,7 @@ const styles = StyleSheet.create({
   },
   viewHistoryText: { color: "#FF6B35", fontWeight: "600", fontSize: 14 },
   
-  // Custom Styles cho Coupon (Từ Main)
+  // Custom Styles cho Coupon
   couponContainer: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
