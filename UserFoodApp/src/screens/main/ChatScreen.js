@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+// Thêm dòng này vào (Tùy theo đường dẫn file firebaseConfig của bạn)
+import { getAuth } from 'firebase/auth';
 import {
   View,
   Text,
@@ -28,15 +30,23 @@ export default function ChatScreen() {
   const flatListRef = useRef(null);
 
   // 1. Tạo sessionId khi lần đầu mở màn hình chat
+  // 1. Lấy UID thật của người dùng khi mở màn hình chat
   useEffect(() => {
-    setSessionId(uuid.v4());
-  }, []);
+    const auth = getAuth();
+    // Lấy thông tin user đang đăng nhập hiện tại
+    const currentUser = auth.currentUser;
 
+    if (currentUser) {
+      // Gán sessionId bằng đúng UID của Firebase
+      setSessionId(currentUser.uid);
+    } else {
+      console.warn("Lỗi: Người dùng chưa đăng nhập!");
+    }
+  }, []);
   const sendMessage = async () => {
     if (!inputText.trim()) return;
 
     const userMsg = inputText.trim();
-    // Thêm tin nhắn của User vào danh sách
     const newUserMessage = {
       id: uuid.v4(),
       text: userMsg,
@@ -48,8 +58,9 @@ export default function ChatScreen() {
     setIsTyping(true);
 
     try {
-      // 2. Gửi request đến webhook n8n
-      // Dùng IP 192.168.1.38 dựa theo log chạy Expo của bạn. Nếu bạn đổi Wi-Fi, hãy nhớ cập nhật lại IP này nhé.
+      // LƯU Ý KHI LÊN PRODUCTION: 
+      // Xóa chữ "-test" trong URL dưới đây thành /webhook/a6fa...
+      // Và nhớ bật công tắc Active (Góc phải trên cùng) trong n8n.
       const N8N_WEBHOOK_URL = 'https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook/a6fa15ad-549b-4397-91f8-80186a6a6b84';
 
       const response = await fetch(N8N_WEBHOOK_URL, {
@@ -67,11 +78,20 @@ export default function ChatScreen() {
         throw new Error(`Lỗi HTTP: ${response.status}`);
       }
 
-      const data = await response.json();
+      // XỬ LÝ FIX LỖI: Đọc text trước để bắt luồng chặn Spam (Plain Text)
+      const responseText = await response.text();
+      let aiResponseText = '';
 
-      // 3. Trích xuất phản hồi từ AI
-      // Tùy theo n8n trả về format nào, thông thường node Langchain trả về data.output
-      const aiResponseText = data.ai_response || data.output || data.text || 'Xin lỗi, hệ thống AI không trả về dữ liệu hợp lệ.';
+      try {
+        // Thử parse JSON (Áp dụng cho luồng AI Agent trả về bình thường)
+        const data = JSON.parse(responseText);
+        // Trích xuất từ node Postgres (ai_response) hoặc mặc định của Langchain (output)
+        aiResponseText = data.ai_response || data.output || data.text || 'Xin lỗi, hệ thống AI không trả về dữ liệu hợp lệ.';
+      } catch (parseError) {
+        // Nếu không parse được JSON -> Đây là thông báo chặn Spam bằng Text từ n8n
+        aiResponseText = responseText;
+      }
+
       const newAiMessage = {
         id: uuid.v4(),
         text: aiResponseText,
@@ -81,10 +101,9 @@ export default function ChatScreen() {
       setMessages((prev) => [...prev, newAiMessage]);
     } catch (error) {
       console.error('Chat error:', error);
-      // 4. Báo lỗi bằng tin nhắn hệ thống (màu đỏ)
       const errorMessage = {
         id: uuid.v4(),
-        text: 'Hệ thống đang bận hoặc mất kết nối n8n, vui lòng thử lại sau! (' + error.message + ')',
+        text: 'Hệ thống đang bận hoặc mất kết nối máy chủ, vui lòng thử lại sau! (' + error.message + ')',
         sender: 'system',
       };
       setMessages((prev) => [...prev, errorMessage]);

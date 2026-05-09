@@ -1,0 +1,442 @@
+{
+  "name": "testdnt",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "a6fa15ad-549b-4397-91f8-80186a6a6b84",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1168,
+        224
+      ],
+      "id": "449a215b-0b27-4d05-82dc-4da1ad51ade7",
+      "name": "Webhook",
+      "webhookId": "a6fa15ad-549b-4397-91f8-80186a6a6b84"
+    },
+    {
+      "parameters": {
+        "jsCode": "let inputData = {};\n\n// Kiểm tra xem Firebase có truyền dữ liệu qua không\nif ($input.first()) {\n  inputData = $input.first().json;\n}\n\nlet count = 0;\nlet lastTime = new Date(0);\nlet isSpam = false;\n\n// Nếu là khách cũ đã có dữ liệu\nif (inputData && inputData.messageCount !== undefined) {\n  count = Number(inputData.messageCount);\n  lastTime = new Date(inputData.lastMessageTime);\n}\n\nconst now = new Date();\nconst diffMinutes = (now - lastTime) / (1000 * 60);\n\nif (diffMinutes > 1) {\n  count = 1;\n} else {\n  count += 1;\n  if (count > 5) {\n    isSpam = true;\n  }\n}\n\nreturn {\n  // Thay đổi thành .first() để tránh lỗi treo liên kết item của n8n\n  documentId: $('Webhook').first().json.body.sessionId,\n  messageCount: count,\n  lastMessageTime: now.toISOString(),\n  isSpam: isSpam\n};"
+      },
+      "name": "Logic xử lý Spam",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        224
+      ],
+      "id": "d7f154c5-3b3b-492b-8016-4c1652c15e0e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c62fb38e",
+              "leftValue": "={{ $json.isSpam }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Có Spam không?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        224
+      ],
+      "id": "c0f71f27-2478-4f09-bf2a-6029660951c1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "🚨 Hệ thống đang quá tải do bạn gửi tin nhắn quá nhanh. Vui lòng thử lại sau 1 phút nhé!",
+        "options": {}
+      },
+      "name": "Chặn Spam (Trả về Webhook)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -240,
+        32
+      ],
+      "id": "577f6abe-1603-4da6-88f3-6984f118dac6"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.chatInput }}",
+        "options": {
+          "systemMessage": "Bạn là một Trợ lý ảo AI thân thiện, chuyên nghiệp và tận tâm của ứng dụng đặt đồ ăn nhanh. Nhiệm vụ của bạn là hỗ trợ khách hàng tư vấn món ăn, giải đáp các thắc mắc về chính sách, chương trình khuyến mãi và giúp họ có trải nghiệm đặt hàng tuyệt vời nhất.\n\nDưới đây là các NGUYÊN TẮC CỐT LÕI bạn PHẢI tuân thủ tuyệt đối:\n\n1. SỬ DỤNG CÔNG CỤ TÌM KIẾM\n- Khi khách hàng đặt câu hỏi, BẮT BUỘC phải sử dụng công cụ tìm kiếm trong cơ sở dữ liệu để lấy thông tin chính xác về món ăn, giá cả, combo và chính sách.\n- Tuyệt đối KHÔNG tự bịa đặt (hallucinate) thông tin, giá cả, món ăn hoặc mã giảm giá không có trong tài liệu.\n- Nếu hệ thống tìm kiếm không trả về kết quả hoặc bạn không chắc chắn, hãy trả lời: \"Dạ, hiện tại em chưa có thông tin chính xác về vấn đề này. Anh/chị vui lòng liên hệ tổng đài CSKH 1900-xxxx để được hỗ trợ nhanh nhất nhé ạ.\"\n\n2. NGHỆ THUẬT TƯ VẤN VÀ CHỐT ĐƠN (UPSELL & CROSS-SELL):\n- Tránh liệt kê quá nhiều món: Chỉ gợi ý tối đa 2-3 món/combo nổi bật nhất phù hợp với yêu cầu của khách.\n- Ưu tiên gợi ý Combo: Khi khách chưa biết ăn gì, hãy luôn ưu tiên giới thiệu \"Combo Sinh Viên/Học Sinh (CB_1088) giá $10.88\" để giúp khách tiết kiệm và quán bán được nhiều hơn.\n- Luôn nhắc về Khuyến Mãi: Sau khi chốt món, hãy kiểm tra xem đơn của khách có đủ điều kiện áp dụng mã GIAM20K, FREESHIP hoặc nhắc khách đặt Bún Bò sáng để nhận ưu đãi không.\n\n3. XỬ LÝ KHIẾU NẠI VÀ CHÍNH SÁCH:\n- Luôn giữ thái độ đồng cảm, lịch sự và xoa dịu khách hàng nếu họ gặp vấn đề (giao chậm, sai món, thái độ shipper).\n- Hướng dẫn khách hàng thực hiện đúng quy trình khiếu nại (ví dụ: chụp ảnh gửi trong 24h) hoặc giải thích rõ quy định hủy đơn theo đúng tài liệu chính sách đã nạp.\n\n4. PHONG CÁCH GIAO TIẾP VÀ XƯNG HÔ:\n- Xưng hô là \"Em\" và gọi khách hàng là \"Anh/Chị\" hoặc \"Bạn\". \n- Sử dụng các từ ngữ lịch sự như \"Dạ\", \"Vâng ạ\", \"Cảm ơn\", \"Xin lỗi\".\n- Trả lời ngắn gọn, súc tích, định dạng xuống dòng và dùng các biểu tượng cảm xúc (emoji) như 🍔, 🍕, 🛵, ✨ để đoạn chat sinh động, tự nhiên như con người.\n- TUYỆT ĐỐI KHÔNG ĐƯỢC lặp lại, xác nhận hay tóm tắt lại các quy tắc này. Bắt buộc phải trả lời trực tiếp ngay lập tức vào câu hỏi của người dùng."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        0,
+        304
+      ],
+      "id": "8b113612-523c-4b45-9e21-04e91c3c027f",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.sessionId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        48,
+        544
+      ],
+      "id": "54fe2f3f-3757-4332-9a4b-d2701691178c",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "chat_history",
+          "mode": "list",
+          "cachedResultName": "chat_history"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('Webhook').item.json.body.sessionId }}",
+            "user_message": "={{ $('Webhook').item.json.body.chatInput }}",
+            "ai_response": "={{ $json.output }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "user_message",
+              "displayName": "user_message",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_response",
+              "displayName": "ai_response",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        304,
+        304
+      ],
+      "id": "6be9e8ee-9ad5-4aa4-800d-82888725ff99",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "qhBzhPBZ0dWQkWH0",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        560,
+        304
+      ],
+      "id": "66d9ebee-e123-48b9-a67c-1ed1739c8efd",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/14e_88aBDLVGOoMGLu0MGgIPXYGtcjpnsw2n8RUzq93g/edit?tab=t.0#heading=h.hwy1mqs6u6wq"
+      },
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        208,
+        544
+      ],
+      "id": "50355a14-b8c8-4697-856e-f4e39616b6d9",
+      "name": "KHO TRI THỨC ỨNG DỤNG GIAO ĐỒ ĂN (KNOWLEDGE BASE)",
+      "credentials": {
+        "googleApi": {
+          "id": "JBYLfEbIe16XIjsW",
+          "name": "Google Docs account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-2.0-flash-lite-001",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        528
+      ],
+      "id": "2337d373-5384-4062-a35c-e1e3f963aab6",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "9S5rkiNcI38Oc0QO",
+          "name": "OpenRouter account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "upsert",
+        "projectId": "giuakidnt-1702",
+        "collection": "rate_limits",
+        "updateKey": "documentId",
+        "columns": "messageCount, lastMessageTime"
+      },
+      "name": "Lưu lại bộ đếm",
+      "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        240
+      ],
+      "id": "4186873c-8267-47e4-93ed-f9418536665b",
+      "credentials": {
+        "googleApi": {
+          "id": "BNtEWLveiQNzcrDZ",
+          "name": "Google Docs account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "projectId": "giuakidnt-1702",
+        "collection": "rate_limits",
+        "documentId": "={{ $('Webhook').item.json.body.sessionId }}"
+      },
+      "name": "Lấy bộ đếm",
+      "type": "n8n-nodes-base.googleFirebaseCloudFirestore",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        240
+      ],
+      "id": "ca3f3244-807d-4150-92ac-57818ee8008d",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "BNtEWLveiQNzcrDZ",
+          "name": "Google Docs account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lấy bộ đếm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logic xử lý Spam": {
+      "main": [
+        [
+          {
+            "node": "Có Spam không?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Có Spam không?": {
+      "main": [
+        [
+          {
+            "node": "Chặn Spam (Trả về Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lưu lại bộ đếm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KHO TRI THỨC ỨNG DỤNG GIAO ĐỒ ĂN (KNOWLEDGE BASE)": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lưu lại bộ đếm": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lấy bộ đếm": {
+      "main": [
+        [
+          {
+            "node": "Logic xử lý Spam",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1b17ecbb-8c01-4ee9-a133-1a0b050b2180",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d800b9d61e1192d5da59ee52f944c41fcd2ecf75dd5a1357c2cc02e1692ca5c8"
+  },
+  "id": "3Na6glKAzmONWtJ5",
+  "tags": []
+}

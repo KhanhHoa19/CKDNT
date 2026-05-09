@@ -13,11 +13,13 @@ import ProductDetailAdminScreen from "../screens/products/ProductDetailAdminScre
 import ProductListScreen from "../screens/products/ProductListScreen";
 import EditProfileScreen from "../screens/profile/EditProfileScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
+import AdminScreen from "../screens/users/AdminScreen"; // Thêm import
 
 const Tab = createBottomTabNavigator();
 const ProductStack = createNativeStackNavigator();
 const OrderStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+const UserStack = createNativeStackNavigator();
 
 function ProductStackNav() {
   return (
@@ -51,6 +53,15 @@ function ProfileStackNav() {
     </ProfileStack.Navigator>
   );
 }
+
+function UserStackNav() {
+  return (
+    <UserStack.Navigator screenOptions={{ headerShown: false }}>
+      <UserStack.Screen name="AdminMain" component={AdminScreen} />
+    </UserStack.Navigator>
+  );
+}
+
 
 const TabIcon = ({ emoji, label, focused }) => (
   <View style={{ alignItems: "center" }}>
@@ -88,6 +99,14 @@ export default function MainTabNavigator() {
         options={{
           tabBarLabel: "Đơn hàng",
           tabBarIcon: ({ focused }) => <TabIcon emoji="🧾" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Users"
+        component={UserStackNav}
+        options={{
+          tabBarLabel: "Người dùng",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
         }}
       />
       <Tab.Screen

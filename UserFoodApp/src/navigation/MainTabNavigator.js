@@ -6,6 +6,7 @@ import { useCart } from "../context/CartContext";
 import CartScreen from "../screens/main/CartScreen";
 import CategoryScreen from "../screens/main/CategoryScreen";
 import EditProfileScreen from "../screens/main/EditProfileScreen";
+import AdminScreen from "../screens/main/AdminScreen";
 import HomeScreen from "../screens/main/HomeScreen";
 import OrderHistoryScreen from "../screens/main/OrderHistoryScreen";
 import ProfileScreen from "../screens/main/ProfileScreen";
@@ -67,6 +68,7 @@ function ProfileStackNav() {
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
       <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} />
+      <ProfileStack.Screen name="AdminScreen" component={AdminScreen} />
     </ProfileStack.Navigator>
   );
 }
