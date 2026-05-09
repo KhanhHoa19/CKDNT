@@ -1,4 +1,4 @@
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, doc, updateDoc, increment, arrayUnion } from "firebase/firestore";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +17,7 @@ import uuid from "react-native-uuid";
 import { db } from "../../config/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
+import { validateCoupon } from "../../services/couponService";
 
 export default function CartScreen({ navigation }) {
   const { cartItems, updateQty, removeFromCart, clearCart, totalPrice } =
@@ -33,12 +34,41 @@ export default function CartScreen({ navigation }) {
   const [currentOrderId, setCurrentOrderId] = useState("");
   const [checkingPayment, setCheckingPayment] = useState(false);
 
+  // States cho coupon
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   // Thay IP này bằng IPv4 máy tính của bạn (VD: 192.168.1.x)
   const SERVER_URL = "http://192.168.101.27:3000"; 
 
   const deliveryFee = 0;
-  const discount = cartItems.length > 0 ? Math.round(totalPrice * 0.1) : 0;
-  const total = totalPrice - discount + deliveryFee;
+  const discount = appliedCoupon ? appliedCoupon.discountAmount : 0;
+  const total = totalPrice - discount + deliveryFee > 0 ? totalPrice - discount + deliveryFee : 0;
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setValidatingCoupon(true);
+    setCouponError("");
+    
+    // Tính tổng số lượng sản phẩm (kể cả cùng loại)
+    const totalQty = cartItems.reduce((sum, item) => sum + (item.qty || 1), 0);
+    const result = await validateCoupon(couponCode, totalPrice, totalQty, user.uid);
+    
+    if (result.success) {
+      setAppliedCoupon({
+        code: result.code,
+        discountAmount: result.discountAmount,
+        couponId: result.couponId
+      });
+      Alert.alert("Thành công", result.message);
+    } else {
+      setAppliedCoupon(null);
+      setCouponError(result.message);
+    }
+    setValidatingCoupon(false);
+  };
 
   const formatPrice = (p) =>
     new Intl.NumberFormat("vi-VN", {
@@ -71,11 +101,24 @@ export default function CartScreen({ navigation }) {
         deliveryFee,
         discount,
         total,
+        appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
         paymentMethod: method,
         isPaid,
         status: "pending", // Phải dùng 'pending' để Admin thấy trong tab Chờ duyệt
         createdAt: new Date().toISOString(),
       });
+
+      // 1.5. Cập nhật lượt sử dụng coupon và danh sách user đã dùng
+      if (appliedCoupon && appliedCoupon.couponId) {
+        try {
+          await updateDoc(doc(db, "magiamgia", appliedCoupon.couponId), {
+            usageCount: increment(1),
+            usedBy: arrayUnion(user.uid)
+          });
+        } catch (e) {
+          console.error("Lỗi khi update coupon usage:", e);
+        }
+      }
 
       // 2. Nếu chuyển khoản -> Lưu vào bảng mới hoàn toàn (payment_histories) để đối chiếu
       if (method === "bank" && isPaid) {
@@ -105,6 +148,7 @@ export default function CartScreen({ navigation }) {
             deliveryFee: deliveryFee,
             discount: discount,
             amountPaid: total,
+            appliedCoupon: appliedCoupon ? appliedCoupon.code : null,
           },
 
           paymentMethod: "bank_transfer",
@@ -133,6 +177,9 @@ export default function CartScreen({ navigation }) {
       }
 
       clearCart();
+      setAppliedCoupon(null);
+      setCouponCode("");
+      
       Alert.alert(
         "🎉 Đặt hàng thành công!",
         "Đơn hàng đã được gửi đến admin. Vui lòng chờ xác nhận.",
@@ -330,6 +377,45 @@ export default function CartScreen({ navigation }) {
               renderItem={renderItem}
               scrollEnabled={false}
             />
+
+              {/* Coupon Input */}
+              <View style={styles.couponContainer}>
+                <Text style={styles.summaryTitle}>Mã giảm giá</Text>
+                <View style={styles.couponInputRow}>
+                  <TextInput
+                    style={styles.couponInput}
+                    placeholder="Nhập mã giảm giá"
+                    value={couponCode}
+                    onChangeText={(text) => {
+                      setCouponCode(text);
+                      setCouponError("");
+                    }}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity 
+                    style={[styles.applyCouponBtn, (!couponCode.trim() || validatingCoupon) && {backgroundColor: "#ccc"}]} 
+                    onPress={handleApplyCoupon}
+                    disabled={validatingCoupon || !couponCode.trim()}
+                  >
+                    {validatingCoupon ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.applyCouponText}>Áp dụng</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                {couponError ? <Text style={styles.couponErrorText}>{couponError}</Text> : null}
+                {appliedCoupon ? (
+                  <View style={styles.appliedCouponRow}>
+                    <Text style={styles.appliedCouponText}>
+                      Đã áp dụng mã: <Text style={{fontWeight: "bold"}}>{appliedCoupon.code}</Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => { setAppliedCoupon(null); setCouponCode(""); }}>
+                      <Text style={styles.removeCouponText}>Xóa</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
 
               {/* Payment Method Selection */}
               <View style={styles.methodContainer}>
@@ -625,6 +711,68 @@ const styles = StyleSheet.create({
   },
   viewHistoryText: { color: "#FF6B35", fontWeight: "600", fontSize: 14 },
   
+  // Custom Styles cho Coupon
+  couponContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 20,
+    elevation: 2,
+  },
+  couponInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  couponInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginRight: 10,
+    color: "#333",
+  },
+  applyCouponBtn: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  applyCouponText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  couponErrorText: {
+    color: "#e74c3c",
+    fontSize: 13,
+    marginTop: 8,
+    marginLeft: 4,
+  },
+  appliedCouponRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  appliedCouponText: {
+    color: "#27ae60",
+    fontSize: 14,
+  },
+  removeCouponText: {
+    color: "#e74c3c",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   // Custom Styles cho Method & Modal
   methodContainer: {
     backgroundColor: "#fff",

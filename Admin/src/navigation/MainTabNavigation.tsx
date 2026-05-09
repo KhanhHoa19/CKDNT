@@ -1,4 +1,3 @@
-
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
@@ -6,20 +5,38 @@ import { Text, View } from "react-native";
 
 import OrderDetailScreen from "../screens/orders/OrderDetailScreen";
 import OrderListScreen from "../screens/orders/OrderListScreen";
-import AddCategoryScreen from "../screens/products/AddCategoryScreen"; // ← thêm import
+import AddCategoryScreen from "../screens/products/AddCategoryScreen";
 import AddProductScreen from "../screens/products/AddProductScreen";
 import EditProductScreen from "../screens/products/EditProductScreen";
-import ProductDetailAdminScreen from "../screens/products/ProductDetailAdminScreen"; // ← THÊM
+import ProductDetailAdminScreen from "../screens/products/ProductDetailAdminScreen";
 import ProductListScreen from "../screens/products/ProductListScreen";
 import EditProfileScreen from "../screens/profile/EditProfileScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
-import AdminScreen from "../screens/users/AdminScreen"; // Thêm import
+import CouponManagementScreen from "../screens/coupons/CouponManagementScreen";
+import AdminScreen from "../screens/users/AdminScreen";
 
 const Tab = createBottomTabNavigator();
 const ProductStack = createNativeStackNavigator();
 const OrderStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+const CouponStack = createNativeStackNavigator();
 const UserStack = createNativeStackNavigator();
+
+function CouponStackNav() {
+  return (
+    <CouponStack.Navigator screenOptions={{ headerShown: false }}>
+      <CouponStack.Screen name="CouponManagement" component={CouponManagementScreen} />
+    </CouponStack.Navigator>
+  );
+}
+
+function UserStackNav() {
+  return (
+    <UserStack.Navigator screenOptions={{ headerShown: false }}>
+      <UserStack.Screen name="AdminMain" component={AdminScreen} />
+    </UserStack.Navigator>
+  );
+}
 
 function ProductStackNav() {
   return (
@@ -53,15 +70,6 @@ function ProfileStackNav() {
     </ProfileStack.Navigator>
   );
 }
-
-function UserStackNav() {
-  return (
-    <UserStack.Navigator screenOptions={{ headerShown: false }}>
-      <UserStack.Screen name="AdminMain" component={AdminScreen} />
-    </UserStack.Navigator>
-  );
-}
-
 
 const TabIcon = ({ emoji, label, focused }) => (
   <View style={{ alignItems: "center" }}>
@@ -99,6 +107,14 @@ export default function MainTabNavigator() {
         options={{
           tabBarLabel: "Đơn hàng",
           tabBarIcon: ({ focused }) => <TabIcon emoji="🧾" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Coupons"
+        component={CouponStackNav}
+        options={{
+          tabBarLabel: "Khuyến mãi",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏷️" focused={focused} />,
         }}
       />
       <Tab.Screen
