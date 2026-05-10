@@ -72,19 +72,24 @@ export default function SearchScreen({ navigation, route }) {
       style={styles.card}
       onPress={() => navigation.navigate("ProductDetail", { product: item })}
     >
-      {item.hinhanh ? (
-        <Image source={{ uri: item.hinhanh }} style={styles.cardImg} />
-      ) : (
-        <View style={[styles.cardImg, styles.noImg]}>
-          <Text style={{ fontSize: 36 }}>🍽️</Text>
-        </View>
-      )}
-      <Text style={styles.cardName} numberOfLines={2}>
-        {item.tensp}
-      </Text>
-      <Text style={styles.cardPrice}>{formatPrice(item.gia)}</Text>
-      <TouchableOpacity onPress={() => addToCart(item)}>
-        <Text style={styles.addBtnText}>+ Thêm giỏ hàng</Text>
+      {/* Phần thông tin bên trên */}
+      <View style={{ alignItems: 'center', width: '100%' }}>
+        {item.hinhanh ? (
+          <Image source={{ uri: item.hinhanh }} style={styles.cardImg} />
+        ) : (
+          <View style={[styles.cardImg, styles.noImg]}>
+            <Text style={{ fontSize: 36 }}>🍽️</Text>
+          </View>
+        )}
+        <Text style={styles.cardName} numberOfLines={2}>
+          {item.tensp}
+        </Text>
+        <Text style={styles.cardPrice}>{formatPrice(item.gia)}</Text>
+      </View>
+
+      {/* Phần nút bấm luôn ở dưới cùng */}
+      <TouchableOpacity onPress={() => addToCart(item)} style={{ marginTop: 'auto' }}>
+        <Text style={styles.addBtnText}>+ Add to cart</Text>
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -223,6 +228,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     elevation: 3,
+    justifyContent: 'space-between',
   },
   cardImg: { width: 110, height: 110, borderRadius: 55, marginBottom: 10 },
   noImg: {
@@ -236,6 +242,8 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     textAlign: "center",
     marginBottom: 4,
+    height: 40, // Khoảng 2 dòng text
+    verticalAlign: 'middle', // Căn giữa nội dung theo chiều dọc
   },
   cardPrice: { fontSize: 13, color: "#888", marginBottom: 8 },
   addBtnText: { fontSize: 13, color: "#FF6B35", fontWeight: "600" },

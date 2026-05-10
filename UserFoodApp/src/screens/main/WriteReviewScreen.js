@@ -1,26 +1,26 @@
 import * as ImagePicker from "expo-image-picker";
 import {
-    addDoc,
-    collection,
-    doc,
-    getDocs,
-    query,
-    updateDoc,
-    where,
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
 } from "firebase/firestore";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import uuid from "react-native-uuid";
 import { uploadImageToCloudinary } from "../../config/cloudinary";
@@ -99,19 +99,38 @@ export default function WriteReviewScreen({ navigation, route }) {
 
       setUploading("Đang lưu đánh giá...");
 
-      // Lưu review
-      await addDoc(collection(db, "reviews"), {
+      // 1. SỬA CHỖ NÀY: Khai báo hằng số docRef để hứng kết quả trả về từ addDoc
+      const docRef = await addDoc(collection(db, "reviews"), {
         reviewId: uuid.v4(),
-        productId: product.id, // document id của sanpham
-        orderId: order.id, // document id của orders
+        productId: product.id,
+        orderId: order.id,
         userId: user.uid,
         userName: userProfile?.fullName || "Người dùng",
-        rating, // double 1.0 → 5.0
+        rating,
         comment: comment.trim(),
         images: uploadedUrls,
         createdAt: new Date().toISOString(),
         isVisible: true,
       });
+
+      // 2. Gọi Webhook n8n ngay lập tức
+      try {
+        // LƯU Ý: Nếu muốn chạy thật, hãy đổi /webhook-test/ thành /webhook/ 
+        // URL Test dưới đây chỉ dùng khi bạn đang mở màn hình n8n và bấm Execute
+        await fetch('https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook-test/auto-reply-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reviewDocId: docRef.id, // Bây giờ docRef đã tồn tại
+            userName: userProfile?.fullName || "Người dùng",
+            rating: rating,
+            comment: comment.trim()
+          })
+        });
+        console.log("Đã bắn Webhook sang n8n thành công!");
+      } catch (error) {
+        console.log("Không thể gọi AI Agent:", error);
+      }
 
       // Cập nhật avgRating và totalReviews trong sanpham
       setUploading("Cập nhật điểm...");

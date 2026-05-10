@@ -87,10 +87,10 @@ export default function ProductDetailScreen({ navigation, route }) {
   const formatDate = (iso) =>
     iso
       ? new Date(iso).toLocaleDateString("vi-VN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
       : "";
 
   const renderStars = (rating) => {
@@ -102,7 +102,7 @@ export default function ProductDetailScreen({ navigation, route }) {
   const handleOrderSuccess = ({ qty }) => {
     Alert.alert(
       "✅ Đã thêm vào giỏ",
-              `${qty}x ${liveProduct.tensp}${selectedSize ? ` (${selectedSize.label})` : ""} đã được thêm vào giỏ hàng`,
+      `${qty}x ${liveProduct.tensp}${selectedSize ? ` (${selectedSize.label})` : ""} đã được thêm vào giỏ hàng`,
       [
         { text: "Tiếp tục mua", style: "cancel" },
         {
@@ -262,6 +262,13 @@ export default function ProductDetailScreen({ navigation, route }) {
                         ))}
                       </ScrollView>
                     )}
+                    {/* THÊM ĐOẠN NÀY: Hiển thị phản hồi của Cửa hàng (AI) */}
+                    {review.adminReply ? (
+                      <View style={styles.adminReplyWrap}>
+                        <Text style={styles.adminReplyLabel}>Cửa hàng phản hồi:</Text>
+                        <Text style={styles.adminReplyText}>{review.adminReply}</Text>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })
@@ -426,4 +433,24 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   addBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  // Thêm vào dưới cùng của mảng styles
+  adminReplyWrap: {
+    marginTop: 12,
+    backgroundColor: "#FFF0E8", // Màu nền cam nhạt cho tiệp với theme ứng dụng
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#FF6B35",
+  },
+  adminReplyLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FF6B35",
+    marginBottom: 4,
+  },
+  adminReplyText: {
+    fontSize: 13,
+    color: "#d35400",
+    lineHeight: 18,
+  },
 });
