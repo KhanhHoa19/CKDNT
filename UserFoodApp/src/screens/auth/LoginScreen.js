@@ -1,16 +1,17 @@
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth"; // Thêm signOut
+import { doc, getDoc } from "firebase/firestore"; // Thêm hàm để đọc Database
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity
 } from "react-native";
-import { auth } from "../../config/firebase";
+import { auth, db } from "../../config/firebase"; // Nhớ import thêm db
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -24,7 +25,28 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // 1. Thực hiện đăng nhập qua Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // 2. CHỐT CHẶN KIỂM TRA BAN: Đọc dữ liệu từ bảng rate_limits
+      const rateLimitRef = doc(db, "rate_limits", user.uid);
+      const rateLimitSnap = await getDoc(rateLimitRef);
+
+      if (rateLimitSnap.exists() && rateLimitSnap.data().isBanned === true) {
+        // 3. Nếu phát hiện bị Khóa -> Ép Đăng xuất ngay lập tức
+        await signOut(auth);
+        Alert.alert(
+          "⛔ Tài khoản bị khóa",
+          "Tài khoản của bạn đã bị khóa do vi phạm chính sách chống Spam của hệ thống. Vui lòng liên hệ Admin để được hỗ trợ."
+        );
+        setLoading(false);
+        return; // Dừng lại tại đây, KHÔNG cho vào app
+      }
+
+      // Nếu không bị Ban thì code sẽ chạy tiếp tục ở đây để vào màn hình chính...
+      // (Ví dụ: navigation.navigate("Home") hoặc dựa vào Auth Listener của bạn)
+
     } catch (error) {
       let msg = "Đăng nhập thất bại";
       if (error.code === "auth/invalid-credential")
