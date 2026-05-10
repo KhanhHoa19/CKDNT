@@ -16,12 +16,7 @@ import {
 } from "react-native";
 import { uploadImageToCloudinary } from "../../config/cloudinary";
 import { db } from "../../config/firebase";
-
-const LOAI_SP = [
-  { id: "Burger", label: "Burger", emoji: "🍔" },
-  { id: "Pizza", label: "Pizza", emoji: "🍕" },
-  { id: "Burrito", label: "Burrito", emoji: "🌯" },
-];
+import { useCategories } from "../../context/CategoryContext";
 
 const ALL_SIZES = [
   { id: "S", label: "Nhỏ", extraPrice: 0 },
@@ -31,6 +26,7 @@ const ALL_SIZES = [
 
 export default function EditProductScreen({ navigation, route }) {
   const { product } = route.params;
+  const { categories } = useCategories();
 
   const [tensp, setTensp] = useState(product.tensp || "");
   const [loaisp, setLoaisp] = useState(product.loaisp || "");
@@ -255,30 +251,36 @@ export default function EditProductScreen({ navigation, route }) {
             placeholder="Mô tả nguyên liệu, hương vị..."
           />
 
-          {/* ── LOẠI ── */}
+          {/* ── LOẠI (đồng bộ danh mục Firestore / AddProduct) ── */}
           <Text style={styles.label}>Loại món ăn *</Text>
-          <View style={styles.categoryGrid}>
-            {LOAI_SP.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[
-                  styles.categoryCard,
-                  loaisp === cat.id && styles.categoryCardActive,
-                ]}
-                onPress={() => setLoaisp(cat.id)}
-              >
-                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                <Text
+          {categories.length === 0 ? (
+            <Text style={styles.hint}>
+              Chưa có hạng mục nào. Hãy thêm hạng mục trước.
+            </Text>
+          ) : (
+            <View style={styles.categoryGrid}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
                   style={[
-                    styles.categoryLabel,
-                    loaisp === cat.id && styles.categoryLabelActive,
+                    styles.categoryCard,
+                    loaisp === cat.label && styles.categoryCardActive,
                   ]}
+                  onPress={() => setLoaisp(cat.label)}
                 >
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.categoryLabel,
+                      loaisp === cat.label && styles.categoryLabelActive,
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* ── GIÁ ── */}
           <Text style={styles.label}>Giá gốc (VNĐ) *</Text>
@@ -393,6 +395,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 18,
   },
+  hint: { fontSize: 12, color: "#aaa", marginTop: 4 },
   input: {
     backgroundColor: "#fff",
     borderRadius: 10,

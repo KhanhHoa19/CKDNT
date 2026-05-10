@@ -164,7 +164,7 @@ export default function OrderListScreen({ navigation }) {
       } else {
         Alert.alert(
           "⏳ Chưa xác minh được",
-          `SePay chưa ghi nhận giao dịch hoàn tiền với mã ${refundReq.refundId}.\n\nHãy đảm bảo đã chuyển khoản với nội dung chứa mã này và thử lại sau 5-10 giây.`,
+          `Chưa ghi nhận giao dịch hoàn tiền với mã ${refundReq.refundId}.\n\nHãy đảm bảo đã chuyển khoản với nội dung chứa mã này và thử lại sau 5-10 giây.`,
         );
       }
     } catch (e: any) {
@@ -286,7 +286,7 @@ export default function OrderListScreen({ navigation }) {
           disabled={confirmingRefund === item.id}
         >
           <Text style={styles.confirmRefundBtnText}>
-            {confirmingRefund === item.id ? "⏳ Đang xác minh SePay..." : "✅ Xác nhận đã hoàn tiền"}
+            {confirmingRefund === item.id ? "⏳ Đang xác minh ..." : "✅ Xác nhận đã hoàn tiền"}
           </Text>
         </TouchableOpacity>
       )}
