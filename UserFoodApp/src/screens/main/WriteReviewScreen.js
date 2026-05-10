@@ -117,7 +117,7 @@ export default function WriteReviewScreen({ navigation, route }) {
       try {
         // LƯU Ý: Nếu muốn chạy thật, hãy đổi /webhook-test/ thành /webhook/ 
         // URL Test dưới đây chỉ dùng khi bạn đang mở màn hình n8n và bấm Execute
-        await fetch('https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook-test/auto-reply-review', {
+        await fetch('https://cornell-unpugilistic-dorsoventrally.ngrok-free.dev/webhook/auto-reply-review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
