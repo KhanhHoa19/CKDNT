@@ -135,7 +135,7 @@ export default function MainTabNavigator() {
         name="Search"
         component={SearchStackNav}
         options={{
-          tabBarLabel: "Search",
+          tabBarLabel: "Tìm kiếm",
           tabBarIcon: ({ focused }) => <TabIcon emoji="🔍" focused={focused} />,
         }}
       />
@@ -144,7 +144,7 @@ export default function MainTabNavigator() {
         name="Cart"
         component={CartStackNav}
         options={{
-          tabBarLabel: "Cart",
+          tabBarLabel: "Giỏ hàng",
           tabBarIcon: ({ focused }) => (
             <TabIcon emoji="🛒" focused={focused} badge={totalItems} />
           ),
@@ -162,7 +162,7 @@ export default function MainTabNavigator() {
         name="Profile"
         component={ProfileStackNav}
         options={{
-          tabBarLabel: "Profile",
+          tabBarLabel: "Tôi",
           tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
         }}
       />

@@ -1,12 +1,4 @@
-/**
- * SearchScreen.js  (User app)  — ĐÃ CẬP NHẬT
- * ─────────────────────────────────────────────────────────────
- * Thay đổi:
- *   • Tab lọc đọc từ useCategories() thay vì hardcode TABS
- *   • "All" vẫn là tab đầu tiên cố định
- *   • Realtime: khi admin thêm hạng mục mới → tab mới xuất hiện
- * ─────────────────────────────────────────────────────────────
- */
+
 
 import { collection, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -92,7 +84,7 @@ export default function SearchScreen({ navigation, route }) {
       </Text>
       <Text style={styles.cardPrice}>{formatPrice(item.gia)}</Text>
       <TouchableOpacity onPress={() => addToCart(item)}>
-        <Text style={styles.addBtnText}>+ Add to cart</Text>
+        <Text style={styles.addBtnText}>+ Thêm giỏ hàng</Text>
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -102,14 +94,14 @@ export default function SearchScreen({ navigation, route }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerSub}>SEARCH</Text>
-        <Text style={styles.headerTitle}>Find your Favorite Food</Text>
+        <Text style={styles.headerTitle}>Món nào cũng ngon!!!</Text>
       </View>
 
       {/* Search bar */}
       <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search for any food"
+          placeholder="Lựa món ngay"
           value={search}
           onChangeText={setSearch}
         />

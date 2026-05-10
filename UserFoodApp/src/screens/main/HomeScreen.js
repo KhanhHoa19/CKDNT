@@ -52,7 +52,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.bannerLeft}>
           <Text style={styles.bannerTag}>SUMMER</Text>
           <Text style={styles.bannerTitle}>SUMMER{"\n"}COMBO</Text>
-          <Text style={styles.bannerPrice}>$10.88</Text>
+          <Text style={styles.bannerPrice}>Chỉ từ 159.000</Text>
         </View>
         <View style={styles.bannerRight}>
           <Text style={{ fontSize: 80 }}>🍔</Text>
