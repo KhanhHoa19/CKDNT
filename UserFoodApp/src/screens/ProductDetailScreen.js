@@ -1,8 +1,9 @@
-import { doc, onSnapshot } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +21,8 @@ export default function ProductDetailScreen({ navigation, route }) {
   const { product } = route.params;
   const { userProfile } = useAuth();
 
-  const allImages = [product.hinhanh, ...(product.images || [])].filter(
+  const [liveProduct, setLiveProduct] = useState(product);
+  const allImages = [liveProduct.hinhanh, ...(liveProduct.images || [])].filter(
     Boolean,
   );
 
@@ -28,6 +30,7 @@ export default function ProductDetailScreen({ navigation, route }) {
     product.sizes?.length > 0 ? product.sizes[0] : null,
   );
   const [modalVisible, setModalVisible] = useState(false);
+  const [reviews, setReviews] = useState([]);
 
   // Realtime rating từ Firestore
   const [avgRating, setAvgRating] = useState(product.avgRating || 0);
@@ -36,14 +39,43 @@ export default function ProductDetailScreen({ navigation, route }) {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "sanpham", product.id), (snap) => {
       if (snap.exists()) {
-        setAvgRating(snap.data().avgRating || 0);
-        setTotalReviews(snap.data().totalReviews || 0);
+        const live = { id: snap.id, ...snap.data() };
+        setLiveProduct(live);
       }
     });
     return unsub;
   }, [product.id]);
 
-  const basePrice = product.gia || 0;
+  useEffect(() => {
+    const q = query(collection(db, "reviews"), where("productId", "==", product.id));
+    const unsub = onSnapshot(q, (snap) => {
+      const reviewData = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((r) => r.isVisible !== false)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setReviews(reviewData);
+    });
+    return unsub;
+  }, [product.id]);
+
+  const { avgFromReviews, totalFromReviews } = useMemo(() => {
+    const total = reviews.length;
+    if (total === 0) return { avgFromReviews: 0, totalFromReviews: 0 };
+    const sum = reviews.reduce((acc, item) => acc + Number(item.rating || 0), 0);
+    return { avgFromReviews: sum / total, totalFromReviews: total };
+  }, [reviews]);
+
+  useEffect(() => {
+    if (totalFromReviews > 0) {
+      setAvgRating(avgFromReviews);
+      setTotalReviews(totalFromReviews);
+      return;
+    }
+    setAvgRating(Number(liveProduct.avgRating || 0));
+    setTotalReviews(Number(liveProduct.totalReviews || 0));
+  }, [avgFromReviews, totalFromReviews, liveProduct.avgRating, liveProduct.totalReviews]);
+
+  const basePrice = liveProduct.gia || 0;
   const sizeExtra = selectedSize?.extraPrice || 0;
   const finalPrice = basePrice + sizeExtra;
 
@@ -52,12 +84,25 @@ export default function ProductDetailScreen({ navigation, route }) {
       style: "currency",
       currency: "VND",
     }).format(p);
+  const formatDate = (iso) =>
+    iso
+      ? new Date(iso).toLocaleDateString("vi-VN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+      : "";
+
+  const renderStars = (rating) => {
+    const safe = Math.max(0, Math.min(5, Math.round(Number(rating || 0))));
+    return "★".repeat(safe) + "☆".repeat(5 - safe);
+  };
 
   // Callback khi đặt hàng thành công từ CheckoutBottomSheet
   const handleOrderSuccess = ({ qty }) => {
     Alert.alert(
       "✅ Đã thêm vào giỏ",
-      `${qty}x ${product.tensp}${selectedSize ? ` (${selectedSize.label})` : ""} đã được thêm vào giỏ hàng`,
+              `${qty}x ${liveProduct.tensp}${selectedSize ? ` (${selectedSize.label})` : ""} đã được thêm vào giỏ hàng`,
       [
         { text: "Tiếp tục mua", style: "cancel" },
         {
@@ -91,10 +136,10 @@ export default function ProductDetailScreen({ navigation, route }) {
         {/* Info */}
         <View style={styles.info}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{product.loaisp}</Text>
+            <Text style={styles.badgeText}>{liveProduct.loaisp}</Text>
           </View>
 
-          <Text style={styles.name}>{product.tensp}</Text>
+          <Text style={styles.name}>{liveProduct.tensp}</Text>
 
           {totalReviews > 0 && (
             <View style={styles.ratingRow}>
@@ -111,8 +156,8 @@ export default function ProductDetailScreen({ navigation, route }) {
             )}
           </View>
 
-          {product.mota ? (
-            <Text style={styles.desc}>{product.mota}</Text>
+          {liveProduct.mota ? (
+            <Text style={styles.desc}>{liveProduct.mota}</Text>
           ) : (
             <Text style={styles.desc}>
               Món ăn ngon được chế biến từ nguyên liệu tươi. Giao hàng nhanh
@@ -120,11 +165,11 @@ export default function ProductDetailScreen({ navigation, route }) {
             </Text>
           )}
 
-          {product.sizes?.length > 0 && (
+          {liveProduct.sizes?.length > 0 && (
             <View style={styles.sizeSection}>
               <Text style={styles.sizeTitle}>Chọn size</Text>
               <View style={styles.sizeRow}>
-                {product.sizes.map((s) => (
+                {liveProduct.sizes.map((s) => (
                   <TouchableOpacity
                     key={s.id}
                     style={[
@@ -165,13 +210,63 @@ export default function ProductDetailScreen({ navigation, route }) {
             </View>
           )}
 
-          {product.soluong !== undefined && (
+          {liveProduct.soluong !== undefined && (
             <Text style={styles.stockText}>
-              {product.soluong > 0
-                ? `🟢 Còn ${product.soluong} phần`
-                : "🔴 Hết hàng"}
+              {liveProduct.soluong > 0
+                ? `🟢 Còn ${liveProduct.soluong} phần`
+                : "🔴 Số lượng: 0 - đơn hàng đã hết"}
             </Text>
           )}
+
+          <View style={styles.reviewSection}>
+            <Text style={styles.reviewSectionTitle}>
+              Đánh giá từ khách hàng ({reviews.length})
+            </Text>
+            {reviews.length === 0 ? (
+              <Text style={styles.noReviewText}>
+                Chưa có đánh giá nào cho món này.
+              </Text>
+            ) : (
+              reviews.map((review) => {
+                const reviewImages = Array.isArray(review.images) ? review.images : [];
+                return (
+                  <View key={review.id} style={styles.reviewCard}>
+                    <View style={styles.reviewTop}>
+                      <View>
+                        <Text style={styles.reviewUser}>
+                          {review.userName || "Người dùng"}
+                        </Text>
+                        <Text style={styles.reviewDate}>
+                          {formatDate(review.createdAt)}
+                        </Text>
+                      </View>
+                      <Text style={styles.reviewStars}>
+                        {renderStars(review.rating)}
+                      </Text>
+                    </View>
+                    {!!review.comment && (
+                      <Text style={styles.reviewComment}>{review.comment}</Text>
+                    )}
+                    {reviewImages.length > 0 && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.reviewImagesRow}
+                      >
+                        {reviewImages.map((img, idx) => (
+                          <Image
+                            key={`${review.id}-${idx}`}
+                            source={{ uri: img }}
+                            style={styles.reviewImage}
+                          />
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -186,12 +281,12 @@ export default function ProductDetailScreen({ navigation, route }) {
         <TouchableOpacity
           style={[
             styles.addBtn,
-            product.soluong === 0 && { backgroundColor: "#ccc" },
+            liveProduct.soluong === 0 && { backgroundColor: "#ccc" },
           ]}
-          onPress={() => product.soluong !== 0 && setModalVisible(true)}
+          onPress={() => liveProduct.soluong !== 0 && setModalVisible(true)}
         >
           <Text style={styles.addBtnText}>
-            {product.soluong === 0 ? "Hết hàng" : "+ Thêm vào giỏ"}
+            {liveProduct.soluong === 0 ? "Đơn hàng đã hết" : "+ Thêm vào giỏ"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -200,7 +295,7 @@ export default function ProductDetailScreen({ navigation, route }) {
       <CheckoutBottomSheet
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        product={product}
+        product={liveProduct}
         selectedSize={selectedSize}
         finalPrice={finalPrice}
         formatPrice={formatPrice}
@@ -286,6 +381,34 @@ const styles = StyleSheet.create({
   sizeBtnId: { fontSize: 16, fontWeight: "900", color: "#555" },
   sizeBtnLabel: { fontSize: 11, color: "#888", marginTop: 2 },
   sizeBtnExtra: { fontSize: 11, color: "#aaa", marginTop: 2 },
+  reviewSection: { marginTop: 22 },
+  reviewSectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1f2937",
+    marginBottom: 10,
+  },
+  noReviewText: { fontSize: 13, color: "#9ca3af" },
+  reviewCard: {
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  reviewTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  reviewUser: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  reviewDate: { fontSize: 11, color: "#9ca3af", marginTop: 2 },
+  reviewStars: { color: "#f59e0b", fontSize: 14, letterSpacing: 1 },
+  reviewComment: { fontSize: 14, color: "#4b5563", lineHeight: 20 },
+  reviewImagesRow: { marginTop: 10, gap: 8 },
+  reviewImage: { width: 82, height: 82, borderRadius: 10, backgroundColor: "#e5e7eb" },
   footer: {
     flexDirection: "row",
     justifyContent: "space-between",

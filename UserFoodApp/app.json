@@ -38,6 +38,14 @@
         {
           "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID to unlock the Secret Info."
         }
+      ],
+       [
+        "expo-media-library",
+        {
+          "photosPermission": "Cho phép ứng dụng lưu mã QR vào thư viện ảnh.",
+          "savePhotosPermission": "Cho phép ứng dụng lưu ảnh vào thư viện.",
+          "isAccessMediaLocationEnabled": true
+        }
       ]
     ]
   }

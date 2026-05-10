@@ -41,7 +41,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.avatarSection}>
         <View style={styles.avatarWrap}>
           <Image
-            source={require("../../../assets/images/avatar-default.png")}
+            source={require("../../../assets/images/myavatar.png")}
             style={styles.avatar}
           />
           <View style={styles.avatarBadge}>
@@ -52,17 +52,17 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Info */}
       <View style={styles.infoCard}>
-        <InfoRow icon="👤" label="Full Name" value={userProfile?.fullName} />
+        <InfoRow icon="👤" label="Họ và tên" value={userProfile?.fullName} />
         <InfoRow icon="✉️" label="Email" value={userProfile?.email} />
-        <InfoRow icon="📞" label="Phone number" value={userProfile?.phone} />
+        <InfoRow icon="📞" label="Số điện thoại" value={userProfile?.phone} />
         <InfoRow
           icon="📍"
-          label="Address 1 - (Home)"
+          label="Địa chỉ 1 - (Nhà)"
           value={userProfile?.address1}
         />
         <InfoRow
           icon="📍"
-          label="Address 2 - (Work)"
+          label="Địa chỉ 2 - (Nơi làm việc)"
           value={userProfile?.address2}
         />
       </View>
@@ -72,11 +72,11 @@ export default function ProfileScreen({ navigation }) {
         style={styles.editBtn}
         onPress={() => navigation.navigate("EditProfile")}
       >
-        <Text style={styles.editBtnText}>Edit Profile</Text>
+        <Text style={styles.editBtnText}>Thay đổi thông tin</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <Text style={styles.logoutBtnText}>🚪 Logout</Text>
+        <Text style={styles.logoutBtnText}>🚪 Đăng xuất</Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
@@ -87,15 +87,19 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fafafa" },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 55,
     paddingBottom: 16,
   },
   backIcon: { fontSize: 20, color: "#333" },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#1a1a1a" },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    letterSpacing: 0.2,
+  },
   searchIcon: { fontSize: 20 },
   avatarSection: { alignItems: "center", paddingVertical: 20 },
   avatarWrap: { position: "relative" },

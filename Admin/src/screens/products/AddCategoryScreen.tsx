@@ -52,7 +52,7 @@ const PRESET_EMOJIS = [
 ];
 
 export default function AddCategoryScreen({ navigation }) {
-  const { categories, addCategory, deleteCategory } = useCategories();
+  const { categories, addCategory, updateCategory, deleteCategory } = useCategories();
 
   const [label, setLabel] = useState("");
   const [emoji, setEmoji] = useState("🍽️");
@@ -61,6 +61,7 @@ export default function AddCategoryScreen({ navigation }) {
   const [imageUri, setImageUri] = useState(null);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
 
   const finalColor = customColor.trim().startsWith("#")
     ? customColor.trim()
@@ -99,6 +100,29 @@ export default function AddCategoryScreen({ navigation }) {
     ]);
   };
 
+  const resetForm = () => {
+    setLabel("");
+    setEmoji("🍽️");
+    setColor(PRESET_COLORS[0]);
+    setCustomColor("");
+    setImageUri(null);
+    setEditingCategory(null);
+  };
+
+  const handleSelectToEdit = (cat) => {
+    setEditingCategory(cat);
+    setLabel(cat.label || "");
+    setEmoji(cat.emoji || "🍽️");
+    if (cat.color && PRESET_COLORS.includes(cat.color)) {
+      setColor(cat.color);
+      setCustomColor("");
+    } else {
+      setColor(PRESET_COLORS[0]);
+      setCustomColor(cat.color || "");
+    }
+    setImageUri(cat.image || null);
+  };
+
   const handleSave = async () => {
     const trimmed = label.trim();
     if (!trimmed) {
@@ -106,30 +130,53 @@ export default function AddCategoryScreen({ navigation }) {
       return;
     }
     if (
-      categories.some((c) => c.label.toLowerCase() === trimmed.toLowerCase())
+      categories.some(
+        (c) =>
+          c.label.toLowerCase() === trimmed.toLowerCase() &&
+          c.id !== editingCategory?.id,
+      )
     ) {
       Alert.alert("Trùng tên", `"${trimmed}" đã tồn tại.`);
       return;
     }
     setLoading(true);
     try {
-      let image = "";
-      if (imageUri) image = await uploadImageToCloudinary(imageUri);
-      const nextOrder = categories.length
-        ? Math.max(...categories.map((c) => c.order ?? 0)) + 1
-        : 1;
-      await addCategory({
-        label: trimmed,
-        emoji,
-        color: finalColor,
-        order: nextOrder,
-        image,
-      });
-      Alert.alert("Thành công", `Đã thêm "${trimmed}"`, [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      const isRemoteImage =
+        typeof imageUri === "string" && imageUri.startsWith("http");
+      let image = editingCategory?.image || "";
+      if (imageUri) {
+        image = isRemoteImage ? imageUri : await uploadImageToCloudinary(imageUri);
+      } else {
+        image = "";
+      }
+
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, {
+          label: trimmed,
+          emoji,
+          color: finalColor,
+          order: editingCategory.order ?? 0,
+          image,
+        });
+        Alert.alert("Thành công", `Đã cập nhật "${trimmed}"`);
+        resetForm();
+      } else {
+        const nextOrder = categories.length
+          ? Math.max(...categories.map((c) => c.order ?? 0)) + 1
+          : 1;
+        await addCategory({
+          label: trimmed,
+          emoji,
+          color: finalColor,
+          order: nextOrder,
+          image,
+        });
+        Alert.alert("Thành công", `Đã thêm "${trimmed}"`, [
+          { text: "OK", onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch {
-      Alert.alert("Lỗi", "Không thể thêm hạng mục.");
+      Alert.alert("Lỗi", "Không thể lưu hạng mục.");
     } finally {
       setLoading(false);
     }
@@ -145,11 +192,24 @@ export default function AddCategoryScreen({ navigation }) {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.back}>← Quay lại</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Thêm Hạng Mục</Text>
+          <Text style={styles.title}>
+            {editingCategory ? "Sửa Hạng Mục" : "Thêm Hạng Mục"}
+          </Text>
           <View style={{ width: 70 }} />
         </View>
 
         <View style={styles.form}>
+          {editingCategory && (
+            <View style={styles.editingBanner}>
+              <Text style={styles.editingBannerText}>
+                Đang sửa: {editingCategory.label}
+              </Text>
+              <TouchableOpacity onPress={resetForm}>
+                <Text style={styles.cancelEditText}>Hủy sửa</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* PREVIEW */}
           <Text style={styles.sectionTitle}>👁️ Xem trước</Text>
           <View style={[styles.previewCard, { backgroundColor: finalColor }]}>
@@ -247,7 +307,14 @@ export default function AddCategoryScreen({ navigation }) {
             Danh mục hiện có ({categories.length})
           </Text>
           {categories.map((cat) => (
-            <View key={cat.id} style={styles.existingRow}>
+            <TouchableOpacity
+              key={cat.id}
+              style={[
+                styles.existingRow,
+                editingCategory?.id === cat.id && styles.existingRowActive,
+              ]}
+              onPress={() => handleSelectToEdit(cat)}
+            >
               {cat.image ? (
                 <Image source={{ uri: cat.image }} style={styles.existingImg} />
               ) : (
@@ -268,7 +335,7 @@ export default function AddCategoryScreen({ navigation }) {
                   <Text style={{ color: "#fff", fontSize: 14 }}>🗑️</Text>
                 )}
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))}
           {categories.length === 0 && (
             <Text style={styles.hint}>Chưa có hạng mục nào</Text>
@@ -283,7 +350,9 @@ export default function AddCategoryScreen({ navigation }) {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.btnText}>💾 Lưu Hạng Mục</Text>
+              <Text style={styles.btnText}>
+                {editingCategory ? "💾 Lưu Cập Nhật" : "💾 Lưu Hạng Mục"}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -306,6 +375,19 @@ const styles = StyleSheet.create({
   back: { color: "#3498db", fontSize: 15 },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   form: { padding: 20 },
+  editingBanner: {
+    backgroundColor: "#eaf4fd",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#b9dcfb",
+    padding: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  editingBannerText: { color: "#2c3e50", fontSize: 13, fontWeight: "700" },
+  cancelEditText: { color: "#3498db", fontSize: 13, fontWeight: "700" },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
@@ -420,6 +502,10 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     gap: 10,
+  },
+  existingRowActive: {
+    borderWidth: 1.5,
+    borderColor: "#3498db",
   },
   existingImg: { width: 36, height: 36, borderRadius: 8 },
   existingLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: "#2c3e50" },

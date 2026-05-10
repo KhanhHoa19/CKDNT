@@ -6,6 +6,7 @@ import {
     onSnapshot,
     orderBy,
     query,
+    updateDoc,
 } from "firebase/firestore";
 import React, {
     createContext,
@@ -29,6 +30,7 @@ interface CategoryContextType {
   categories: FoodCategory[];
   loading: boolean;
   addCategory: (cat: Omit<FoodCategory, "id">) => Promise<void>;
+  updateCategory: (id: string, cat: Omit<FoodCategory, "id">) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
 }
 
@@ -36,6 +38,7 @@ const CategoryContext = createContext<CategoryContextType>({
   categories: [],
   loading: true,
   addCategory: async () => {},
+  updateCategory: async () => {},
   deleteCategory: async () => {},
 });
 
@@ -65,9 +68,16 @@ export function CategoryProvider({ children }: { children: React.ReactNode }) {
     await deleteDoc(doc(db, "danhmucsanpham", id));
   }, []);
 
+  const updateCategory = useCallback(
+    async (id: string, cat: Omit<FoodCategory, "id">) => {
+      await updateDoc(doc(db, "danhmucsanpham", id), cat);
+    },
+    [],
+  );
+
   return (
     <CategoryContext.Provider
-      value={{ categories, loading, addCategory, deleteCategory }}
+      value={{ categories, loading, addCategory, updateCategory, deleteCategory }}
     >
       {children}
     </CategoryContext.Provider>

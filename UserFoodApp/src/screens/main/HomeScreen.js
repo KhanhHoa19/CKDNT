@@ -13,6 +13,8 @@ import { db } from "../../config/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { useCategories } from "../../context/CategoryContext";
 
+const defaultBannerImage = require("../../../assets/images/combo.jpg");
+
 export default function HomeScreen({ navigation }) {
   const { userProfile } = useAuth();
   const { categories, loading: catLoading } = useCategories();
@@ -49,13 +51,22 @@ export default function HomeScreen({ navigation }) {
 
       {/* BANNER */}
       <View style={styles.banner}>
+        <View style={styles.bannerImageWrap}>
+          <Image
+            source={
+              featured?.[0]?.image
+                ? { uri: featured[0].image }
+                : defaultBannerImage
+            }
+            style={styles.bannerImage}
+            resizeMode="cover"
+          />
+          <View style={styles.bannerOverlay} />
+        </View>
         <View style={styles.bannerLeft}>
           <Text style={styles.bannerTag}>SUMMER</Text>
           <Text style={styles.bannerTitle}>SUMMER{"\n"}COMBO</Text>
           <Text style={styles.bannerPrice}>Chỉ từ 159.000</Text>
-        </View>
-        <View style={styles.bannerRight}>
-          <Text style={{ fontSize: 80 }}>🍔</Text>
         </View>
       </View>
 
@@ -87,15 +98,17 @@ export default function HomeScreen({ navigation }) {
               </View>
 
               {/* Ảnh hoặc emoji lớn góc phải */}
-              {cat.image ? (
-                <Image
-                  source={{ uri: cat.image }}
-                  style={styles.categoryImage}
-                  resizeMode="contain"
-                />
-              ) : (
-                <Text style={styles.categoryEmojiLarge}>{cat.emoji}</Text>
-              )}
+              <View style={styles.categoryMedia}>
+                {cat.image ? (
+                  <Image
+                    source={{ uri: cat.image }}
+                    style={styles.categoryImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text style={styles.categoryEmojiLarge}>{cat.emoji}</Text>
+                )}
+              </View>
             </TouchableOpacity>
           ))
       )}
@@ -142,34 +155,56 @@ const styles = StyleSheet.create({
   banner: {
     marginHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: "#D2691E",
-    flexDirection: "row",
-    padding: 20,
+    justifyContent: "center",
+    paddingHorizontal: 20,
     marginBottom: 14,
     overflow: "hidden",
     height: 160,
   },
-  bannerLeft: { flex: 1, justifyContent: "center" },
+  bannerImageWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  bannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(36, 18, 6, 0.38)",
+  },
+  bannerLeft: {
+    justifyContent: "center",
+    width: "58%",
+    zIndex: 2,
+    paddingRight: 10,
+  },
   bannerTag: {
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+    fontFamily: "serif",
     opacity: 0.8,
     marginBottom: 4,
+    letterSpacing: 1.2,
   },
   bannerTitle: {
     color: "#fff",
-    fontSize: 26,
-    fontWeight: "900",
-    lineHeight: 30,
+    fontSize: 30,
+    fontWeight: "700",
+    fontFamily: "serif",
+    fontStyle: "italic",
+    lineHeight: 33,
+    textShadowColor: "rgba(0,0,0,0.28)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   bannerPrice: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: "700",
+    fontFamily: "serif",
     marginTop: 8,
   },
-  bannerRight: { justifyContent: "flex-end" },
+  bannerImage: {
+    width: "100%",
+    height: "100%",
+  },
 
   categoryCard: {
     marginHorizontal: 16,
@@ -183,7 +218,9 @@ const styles = StyleSheet.create({
   categoryTextBlock: {
     flexDirection: "column",
     alignItems: "flex-start",
-    maxWidth: "65%",
+    width: "52%",
+    zIndex: 2,
+    paddingRight: 8,
   },
   categoryEmojiSmall: { fontSize: 24, marginBottom: 4 }, // ← emoji nhỏ trên tên
   categoryLabel: {
@@ -192,17 +229,20 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 8,
   },
-  categoryImage: {
+  categoryMedia: {
     position: "absolute",
-    right: -10,
-    bottom: -5,
-    width: 140,
-    height: 140,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: "50%",
+  },
+  categoryImage: {
+    width: "100%",
+    height: "100%",
   },
   categoryEmojiLarge: {
-    position: "absolute",
-    right: 10,
-    bottom: -8,
-    fontSize: 80,
+    alignSelf: "center",
+    marginTop: 12,
+    fontSize: 72,
   },
 });
