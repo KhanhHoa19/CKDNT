@@ -136,31 +136,34 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chăm sóc khách hàng</Text>
-      </View>
-
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.chatList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-      />
-
-      {isTyping && (
-        <View style={styles.typingIndicator}>
-          <ActivityIndicator size="small" color="#FF6B35" />
-          <Text style={styles.typingText}>AI đang suy nghĩ...</Text>
-        </View>
-      )}
-
+      {/* KeyboardAvoidingView bọc toàn bộ nội dung bên trong SafeAreaView
+          → khi bàn phím bật, layout co lại từ trên xuống, ô input luôn nổi lên trên */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Chăm sóc khách hàng</Text>
+        </View>
+
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.chatList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        />
+
+        {isTyping && (
+          <View style={styles.typingIndicator}>
+            <ActivityIndicator size="small" color="#FF6B35" />
+            <Text style={styles.typingText}>AI đang suy nghĩ...</Text>
+          </View>
+        )}
+
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
